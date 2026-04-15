@@ -1,14 +1,17 @@
 package com.termux.app.fragments.settings;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
+import com.termux.app.activities.ApiToolsActivity;
 import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
 
 @Keep
@@ -23,6 +26,14 @@ public class TermuxAPIPreferencesFragment extends PreferenceFragmentCompat {
         preferenceManager.setPreferenceDataStore(TermuxAPIPreferencesDataStore.getInstance(context));
 
         setPreferencesFromResource(R.xml.termux_api_preferences, rootKey);
+
+        Preference apiToolsPreference = findPreference("termux_api_tools");
+        if (apiToolsPreference != null) {
+            apiToolsPreference.setOnPreferenceClickListener(preference -> {
+                startActivity(new Intent(context, ApiToolsActivity.class));
+                return true;
+            });
+        }
     }
 
 }

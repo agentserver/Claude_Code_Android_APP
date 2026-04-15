@@ -28,6 +28,7 @@ import android.widget.Toast;
 
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.autotasks.AutoTaskCoordinator;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
@@ -64,6 +65,8 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
+
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.util.Arrays;
 
@@ -175,6 +178,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private float mTerminalToolbarDefaultHeight;
 
+    private AutoTaskCoordinator mAutoTaskCoordinator;
+
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
@@ -251,6 +256,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         setToggleKeyboardView();
 
+        mAutoTaskCoordinator = new AutoTaskCoordinator(this);
+        mAutoTaskCoordinator.init();
+
+        setupBottomNav();
+
         registerForContextMenu(mTerminalView);
 
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
@@ -299,6 +309,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             addTermuxActivityRootViewGlobalLayoutListener();
 
         registerTermuxActivityBroadcastReceiver();
+
+        if (mAutoTaskCoordinator != null) {
+            mAutoTaskCoordinator.onStart();
+        }
     }
 
     @Override
@@ -318,6 +332,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
+
+        if (mAutoTaskCoordinator != null) {
+            mAutoTaskCoordinator.onResume();
+        }
 
         mIsOnResumeAfterOnCreate = false;
     }
@@ -363,6 +381,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Exception e) {
             // ignore.
         }
+
+        if (mAutoTaskCoordinator != null) {
+            mAutoTaskCoordinator.onDestroy();
+        }
     }
 
     @Override
@@ -404,6 +426,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                         }
                         mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                        if (mAutoTaskCoordinator != null) {
+                            mAutoTaskCoordinator.onSessionReady();
+                        }
                     } catch (WindowManager.BadTokenException e) {
                         // Activity finished - ignore.
                     }
@@ -427,6 +452,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+
+        if (mAutoTaskCoordinator != null) {
+            mAutoTaskCoordinator.onSessionReady();
+        }
     }
 
     @Override
@@ -593,9 +622,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         });
     }
-
-
-
 
 
     @SuppressLint("RtlHardcoded")
@@ -903,6 +929,181 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public TermuxAppSharedProperties getProperties() {
         return mProperties;
+    }
+
+    // =========================================================================
+    // 简化 UI / 底部导航栏支持
+    // =========================================================================
+
+    /**
+     * 初始化底部导航栏：在"主页"和"终端"两个 Tab 之间切换显示模式。
+     * 默认选中"终端"Tab，保持原有专业用户体验不变。
+     */
+    private void setupBottomNav() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        if (bottomNav == null) return;
+
+        // 默认选中"终端"Tab，保持原有专业用户体验不变
+        bottomNav.setSelectedItemId(R.id.nav_terminal);
+
+        bottomNav.setOnItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.nav_home) {
+                showHomeMode();
+                return true;
+            } else if (id == R.id.nav_terminal) {
+                showTerminalMode();
+                return true;
+            } else if (id == R.id.nav_apikey) {
+                showApiKeyMode();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /** 切换到简化 UI（主页）模式：隐藏终端，显示 HomeFragment。 */
+    private void showHomeMode() {
+        DrawerLayout drawer = getDrawer();
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        View container = findViewById(R.id.home_fragment_container);
+        if (drawer == null || container == null) return;
+
+        if (drawer.isDrawerOpen(android.view.Gravity.START))
+            drawer.closeDrawer(android.view.Gravity.START);
+
+        drawer.setVisibility(View.GONE);
+        // 主页模式下显示原生 extra keys 工具栏（用户可直接操作终端控制键）
+        if (toolbar != null) toolbar.setVisibility(View.VISIBLE);
+        container.setVisibility(View.VISIBLE);
+
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
+        if (homeF == null) {
+            ft.add(R.id.home_fragment_container, new HomeFragment(), "home");
+        } else {
+            ft.show(homeF);
+        }
+        if (apiF != null) ft.hide(apiF);
+        ft.commit();
+    }
+
+    /** 切换到 API Key 管理页面。 */
+    private void showApiKeyMode() {
+        DrawerLayout drawer = getDrawer();
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        View container = findViewById(R.id.home_fragment_container);
+        if (drawer == null || container == null) return;
+
+        if (drawer.isDrawerOpen(android.view.Gravity.START))
+            drawer.closeDrawer(android.view.Gravity.START);
+
+        drawer.setVisibility(View.GONE);
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
+        container.setVisibility(View.VISIBLE);
+
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
+        if (apiF == null) {
+            ft.add(R.id.home_fragment_container, new ApiKeyFragment(), "apikey");
+        } else {
+            ft.show(apiF);
+        }
+        if (homeF != null) ft.hide(homeF);
+        ft.commit();
+    }
+
+    /** 切换回终端模式：隐藏所有 Fragment，恢复终端视图。 */
+    private void showTerminalMode() {
+        DrawerLayout drawer = getDrawer();
+        View container = findViewById(R.id.home_fragment_container);
+        if (drawer == null || container == null) return;
+
+        container.setVisibility(View.GONE);
+        drawer.setVisibility(View.VISIBLE);
+
+        // 隐藏所有非终端 Fragment（保留实例，不销毁）
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
+        if (homeF != null) ft.hide(homeF);
+        if (apiF  != null) ft.hide(apiF);
+        ft.commit();
+
+        // 按用户设置决定是否恢复 extra keys 工具栏
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        if (toolbar != null && mPreferences != null && mPreferences.shouldShowTerminalToolbar()) {
+            toolbar.setVisibility(View.VISIBLE);
+        }
+    }
+
+    // ── HomeFragment 调用的公共方法 ──────────────────────────────────────────
+
+    /**
+     * 读取当前终端 session 最近 maxLines 行文本（含历史回滚缓冲区）。
+     * HomeFragment 通过轮询调用此方法更新输出镜像视图。
+     */
+    /**
+     * 读取当前终端 session 最近 maxLines 行原始输出。
+     *
+     * 使用 session.getRawOutput()（PTY 原始字节捕获），而非 getScreen().getTranscriptText()。
+     * 原因：Claude Code 运行时切换到交替屏幕缓冲区（mAltBuffer），该缓冲区无滚动历史，
+     * 只保留当前可见行（约 24 行）。getRawOutput() 在数据进入模拟器前截获，保留完整历史。
+     */
+    public String getRecentTerminalLines(int maxLines) {
+        TerminalSession session = getCurrentSession();
+        if (session == null) return "";
+        try {
+            String raw = session.getRawOutput();
+            if (raw == null || raw.isEmpty()) return "";
+            String[] lines = raw.split("\n", -1);
+            int start = Math.max(0, lines.length - maxLines);
+            StringBuilder sb = new StringBuilder();
+            for (int i = start; i < lines.length; i++) {
+                sb.append(lines[i]);
+                if (i < lines.length - 1) sb.append("\n");
+            }
+            return sb.toString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    /** 向当前终端 session 写入文本（等同于键盘输入）。 */
+    public void sendTerminalInput(String text) {
+        TerminalSession session = getCurrentSession();
+        if (session != null) session.write(text);
+    }
+
+    /** 当前是否有正在运行的终端 session。 */
+    public boolean hasActiveSession() {
+        TerminalSession session = getCurrentSession();
+        return session != null && session.isRunning();
+    }
+
+    /** 从简化 UI 新建终端 session。 */
+    public void addNewSessionFromHome() {
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+    }
+
+    /**
+     * 将指定 API Key 设为当前激活：
+     * 1. 写入 Ubuntu ~/.profile（持久化）
+     * 2. 在当前终端 session 中 export（立即生效）
+     * Claude API Key 仅含字母/数字/连字符，单引号包裹安全。
+     */
+    public void setActiveApiKey(String key) {
+        // 清除 ~/.profile 中旧的 ANTHROPIC_API_KEY 行，追加新行，并在当前 session export
+        String cmd = "sed -i '/ANTHROPIC_API_KEY/d' ~/.profile 2>/dev/null"
+                   + " && echo \"export ANTHROPIC_API_KEY='" + key + "'\" >> ~/.profile"
+                   + " && export ANTHROPIC_API_KEY='" + key + "'\n";
+        sendTerminalInput(cmd);
     }
 
 

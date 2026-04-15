@@ -3,6 +3,8 @@ package com.termux.app;
 import android.app.Application;
 import android.content.Context;
 
+import com.termux.api.SocketListener;
+import com.termux.api.util.ResultReturner;
 import com.termux.BuildConfig;
 import com.termux.shared.errors.Error;
 import com.termux.shared.logger.Logger;
@@ -42,6 +44,9 @@ public class TermuxApplication extends Application {
 
         // Init app wide shell manager
         TermuxShellManager shellManager = TermuxShellManager.init(context);
+
+        ResultReturner.setContext(this);
+        SocketListener.createSocketListener(this);
 
         // Set NightMode.APP_NIGHT_MODE
         TermuxThemeUtils.setAppNightMode(properties.getNightMode());

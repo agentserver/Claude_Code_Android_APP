@@ -2,13 +2,13 @@
 
 <!DOCTYPE resources [
     <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
-    <!ENTITY TERMUX_APP_NAME "Termux">
-    <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-    <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-    <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
-    <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-    <!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-    <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
+    <!ENTITY TERMUX_APP_NAME "Claude Code Test">
+    <!ENTITY TERMUX_API_APP_NAME "Claude Code Test:API">
+    <!ENTITY TERMUX_BOOT_APP_NAME "Claude Code Test:Boot">
+    <!ENTITY TERMUX_FLOAT_APP_NAME "Claude Code Test:Float">
+    <!ENTITY TERMUX_STYLING_APP_NAME "Claude Code Test:Styling">
+    <!ENTITY TERMUX_TASKER_APP_NAME "Claude Code Test:Tasker">
+    <!ENTITY TERMUX_WIDGET_APP_NAME "Claude Code Test:Widget">
     ]>
 
 <resources>
@@ -208,6 +208,33 @@
     <!-- Termux:API App Preferences -->
     <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
     <string name="termux_api_preferences_summary">Preferences for &TERMUX_API_APP_NAME; app</string>
+    <string name="termux_api_tools_title">API Tools</string>
+    <string name="termux_api_tools_summary">Run built-in API commands and view output</string>
+    <string name="title_activity_api_tools">API Tools</string>
+    <string name="api_tools_description">Run built-in Termux API commands and inspect output.</string>
+    <string name="api_tools_status_ready">Ready</string>
+    <string name="api_tools_status_running">Running: %1$s</string>
+    <string name="api_tools_status_permission">Permission needed: %1$s</string>
+    <string name="api_tools_status_permission_denied">Permission denied. Grant it and try again.</string>
+    <string name="api_tools_output_label">Output</string>
+    <string name="api_tools_output_hint">Output will appear here.</string>
+    <string name="api_tools_output_empty">(empty)</string>
+    <string name="api_tools_output_error">Error: %1$s</string>
+    <string name="api_tools_button_battery">Battery Status</string>
+    <string name="api_tools_button_camera">Camera Info</string>
+    <string name="api_tools_button_sensor">Sensor List</string>
+    <string name="api_tools_button_wifi">Wi-Fi Connection Info</string>
+    <string name="api_tools_button_clipboard">Clipboard Get</string>
+    <string name="api_tools_button_clear">Clear Output</string>
+
+    <string name="api_self_check_title">API self-check (tap for tools)</string>
+    <string name="api_self_check_item">%1$s: %2$s</string>
+    <string name="api_self_check_status_running">API self-check: running...</string>
+    <string name="api_self_check_status_ok">OK</string>
+    <string name="api_self_check_status_empty">OK (empty)</string>
+    <string name="api_self_check_status_note">OK (%1$s)</string>
+    <string name="api_self_check_status_permission">Permission required: %1$s</string>
+    <string name="api_self_check_status_error">Error: %1$s</string>
 
 
 

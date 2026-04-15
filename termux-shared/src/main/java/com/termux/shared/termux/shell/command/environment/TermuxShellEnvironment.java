@@ -16,6 +16,7 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.shell.TermuxShellUtils;
 
 import java.nio.charset.Charset;
+import java.io.File;
 import java.util.HashMap;
 
 /**
@@ -88,7 +89,8 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
             } else {
                 // Termux binaries on Android 7+ rely on DT_RUNPATH, so LD_LIBRARY_PATH should be unset by default
                 environment.put(ENV_PATH, TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH);
-                environment.remove(ENV_LD_LIBRARY_PATH);
+                // Keep LD_LIBRARY_PATH to support custom package prefixes in bootstrap binaries.
+                environment.put(ENV_LD_LIBRARY_PATH, TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH);
             }
         }
 
@@ -112,6 +114,36 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
     @Override
     public String[] setupShellCommandArguments(@NonNull String executable, String[] arguments) {
         return TermuxShellUtils.setupShellCommandArguments(executable, arguments);
+    }
+
+    @NonNull
+    @Override
+    public HashMap<String, String> setupShellCommandEnvironment(@NonNull Context currentPackageContext,
+                                                                @NonNull ExecutionCommand executionCommand) {
+        HashMap<String, String> environment = super.setupShellCommandEnvironment(currentPackageContext, executionCommand);
+
+        if (!environment.containsKey("SHELL") && executionCommand.executable != null) {
+            environment.put("SHELL", executionCommand.executable);
+        }
+
+        if (!environment.containsKey("LD_PRELOAD")) {
+            String preload = getTermuxExecPreloadPath();
+            if (preload != null) {
+                environment.put("LD_PRELOAD", preload);
+            }
+        }
+
+        return environment;
+    }
+
+    private String getTermuxExecPreloadPath() {
+        String preload = TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH + "/libtermux-exec-ld-preload.so";
+        if (new File(preload).isFile()) return preload;
+
+        preload = TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH + "/libtermux-exec.so";
+        if (new File(preload).isFile()) return preload;
+
+        return null;
     }
 
 }

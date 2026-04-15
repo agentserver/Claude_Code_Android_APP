@@ -1,6 +1,11 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
+        app:key="termux_api_tools"
+        app:title="@string/termux_api_tools_title"
+        app:summary="@string/termux_api_tools_summary" />
+
+    <Preference
         app:title="@string/termux_debugging_preferences_title"
         app:summary="@string/termux_debugging_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment"/>

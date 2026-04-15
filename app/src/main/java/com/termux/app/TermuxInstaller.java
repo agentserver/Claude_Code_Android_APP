@@ -19,16 +19,21 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.errors.Error;
 import com.termux.shared.android.PackageUtils;
+import com.termux.shared.termux.TermuxBootstrap;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
+import com.termux.shared.data.DataUtils;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -106,7 +111,34 @@ final class TermuxInstaller {
         if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)) {
             if (TermuxFileUtils.isTermuxPrefixDirectoryEmpty()) {
                 Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" exists but is empty or only contains specific unimportant files.");
+            } else if (!isBootstrapFilesValid()) {
+                Logger.logError(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" is missing required bootstrap files. Reinstalling bootstrap.");
+                Error error = FileUtils.deleteFile("termux prefix directory", TERMUX_PREFIX_DIR_PATH, true);
+                if (error != null) {
+                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                    return;
+                }
             } else {
+                Error compatError = ensureBootstrapCompatPrefixSymlink();
+                if (compatError != null) {
+                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(compatError));
+                    return;
+                }
+                Error aptError = ensureAptCacheConfig();
+                if (aptError != null) {
+                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(aptError));
+                    return;
+                }
+                Error permsError = ensureBootstrapFilePermissions();
+                if (permsError != null) {
+                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(permsError));
+                    return;
+                }
+                String abiMismatch = getBootstrapAbiMismatchMessage();
+                if (abiMismatch != null) {
+                    showBootstrapErrorDialog(activity, whenDone, abiMismatch);
+                    return;
+                }
                 whenDone.run();
                 return;
             }
@@ -216,6 +248,27 @@ final class TermuxInstaller {
                         throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
                     }
 
+                    error = ensureBootstrapCompatPrefixSymlink();
+                    if (error != null) {
+                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        return;
+                    }
+                    error = ensureAptCacheConfig();
+                    if (error != null) {
+                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        return;
+                    }
+                    error = ensureBootstrapFilePermissions();
+                    if (error != null) {
+                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                        return;
+                    }
+                    String abiMismatch = getBootstrapAbiMismatchMessage();
+                    if (abiMismatch != null) {
+                        showBootstrapErrorDialog(activity, whenDone, abiMismatch);
+                        return;
+                    }
+
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
 
                     // Recreate env file since termux prefix was wiped earlier
@@ -247,7 +300,12 @@ final class TermuxInstaller {
 
         activity.runOnUiThread(() -> {
             try {
-                new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(R.string.bootstrap_error_body)
+                String details = DataUtils.getTruncatedCommandOutput(message, 4000, false, true, true);
+                String body = activity.getString(R.string.bootstrap_error_body);
+                if (details != null && !details.isEmpty()) {
+                    body = body + "\n\n" + details;
+                }
+                new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(body)
                     .setNegativeButton(R.string.bootstrap_error_abort, (dialog, which) -> {
                         dialog.dismiss();
                         activity.finish();
@@ -375,6 +433,106 @@ final class TermuxInstaller {
         return FileUtils.createDirectoryFile(directory.getAbsolutePath());
     }
 
+    private static Error ensureBootstrapCompatPrefixSymlink() {
+        String compatPrefix = TermuxConstants.TERMUX_BOOTSTRAP_COMPAT_PREFIX_DIR_PATH;
+        if (TERMUX_PREFIX_DIR_PATH.equals(compatPrefix)) return null;
+        return FileUtils.createSymlinkFile("termux compat prefix", TERMUX_PREFIX_DIR_PATH, compatPrefix);
+    }
+
+    private static Error ensureAptCacheConfig() {
+        if (!TermuxBootstrap.isAppPackageManagerAPT()) return null;
+
+        String cacheDirPath = TermuxConstants.TERMUX_INTERNAL_PRIVATE_APP_DATA_DIR_PATH + "/cache/apt";
+        Error error = FileUtils.createDirectoryFile(cacheDirPath + "/archives/partial");
+        if (error != null) return error;
+
+        String aptConfPath = TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/apt/apt.conf";
+        String aptConfContents = "# Auto-generated to override apt cache path for custom package name\n"
+            + "Dir::Cache \"" + cacheDirPath + "\";\n"
+            + "Dir::Cache::archives \"archives\";\n"
+            + "Dir::Cache::archives::partial \"archives/partial\";\n";
+
+        boolean shouldWrite = true;
+        if (FileUtils.fileExists(aptConfPath, false)) {
+            StringBuilder existing = new StringBuilder();
+            Error readError = FileUtils.readTextFromFile("apt conf", aptConfPath, StandardCharsets.UTF_8, existing, false);
+            if (readError == null) {
+                String contents = existing.toString();
+                if (contents.contains(cacheDirPath)) {
+                    shouldWrite = false;
+                } else if (contents.contains("Dir::Cache") && !contents.contains("/data/data/com.termux/cache")) {
+                    shouldWrite = false;
+                }
+            }
+        }
+
+        if (shouldWrite) {
+            return FileUtils.writeTextToFile("apt conf", aptConfPath, StandardCharsets.UTF_8, aptConfContents, false);
+        }
+
+        return null;
+    }
+
+    private static Error ensureBootstrapFilePermissions() {
+        Error error;
+
+        String[] dirs = new String[] {
+            TermuxConstants.TERMUX_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_LIBEXEC_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH,
+            TermuxConstants.TERMUX_VAR_PREFIX_DIR_PATH
+        };
+
+        for (String dir : dirs) {
+            error = FileUtils.validateDirectoryFileExistenceAndPermissions("termux directory", dir,
+                TermuxConstants.TERMUX_PREFIX_DIR_PATH, false, FileUtils.APP_WORKING_DIRECTORY_PERMISSIONS,
+                true, true, false, false);
+            if (error != null) return error;
+        }
+
+        String[] execFiles = new String[] {
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/dash",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkg"
+        };
+
+        for (String file : execFiles) {
+            error = ensureExecutableOrSymlink(file);
+            if (error != null) return error;
+        }
+
+        String[] readFiles = new String[] {
+            TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/profile",
+            TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/termux-login.sh"
+        };
+
+        for (String file : readFiles) {
+            error = FileUtils.validateRegularFileExistenceAndPermissions("termux config", file,
+                TermuxConstants.TERMUX_PREFIX_DIR_PATH, "r--", true, true, false);
+            if (error != null) return error;
+        }
+
+        return null;
+    }
+
+    private static Error ensureExecutableOrSymlink(String filePath) {
+        if (FileUtils.symlinkFileExists(filePath)) {
+            String targetPath = FileUtils.getCanonicalPath(filePath, null);
+            return FileUtils.validateRegularFileExistenceAndPermissions("termux executable target", targetPath,
+                TermuxConstants.TERMUX_PREFIX_DIR_PATH, FileUtils.APP_EXECUTABLE_FILE_PERMISSIONS,
+                true, true, false);
+        }
+
+        return FileUtils.validateRegularFileExistenceAndPermissions("termux executable", filePath,
+            TermuxConstants.TERMUX_PREFIX_DIR_PATH, FileUtils.APP_EXECUTABLE_FILE_PERMISSIONS,
+            true, true, false);
+    }
+
     public static byte[] loadZipBytes() {
         // Only load the shared library when necessary to save memory usage.
         System.loadLibrary("termux-bootstrap");
@@ -382,5 +540,177 @@ final class TermuxInstaller {
     }
 
     public static native byte[] getZip();
+
+    private static boolean isBootstrapFilesValid() {
+        List<String> requiredFiles = new ArrayList<>(Arrays.asList(
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login",
+            TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/profile",
+            TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/tls/cert.pem"
+        ));
+
+        if (TermuxBootstrap.isAppPackageManagerAPT()) {
+            requiredFiles.add(TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH + "/apt/sources.list");
+        }
+
+        for (String path : requiredFiles) {
+            if (!FileUtils.fileExists(path, true)) {
+                Logger.logError(LOG_TAG, "Missing bootstrap file: " + path);
+                return false;
+            }
+
+            File file = new File(path);
+            if (file.isFile() && file.length() == 0) {
+                Logger.logError(LOG_TAG, "Bootstrap file is empty: " + path);
+                return false;
+            }
+        }
+
+        if (!isScriptShebangCompatible(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login")) {
+            return false;
+        }
+        if (!isScriptShebangCompatible(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkg")) {
+            return false;
+        }
+        if (!isBootstrapBinaryAbiSupported(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash")) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean isScriptShebangCompatible(String filePath) {
+        String line = readFirstLine(filePath);
+        if (line == null || line.isEmpty()) {
+            Logger.logError(LOG_TAG, "Failed to read bootstrap script: " + filePath);
+            return false;
+        }
+
+        if (!line.startsWith("#!")) return true;
+
+        String interpreter = line.substring(2).trim();
+        int spaceIndex = interpreter.indexOf(' ');
+        if (spaceIndex > 0) {
+            interpreter = interpreter.substring(0, spaceIndex);
+        }
+
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        String compatPrefix = TermuxConstants.TERMUX_BOOTSTRAP_COMPAT_PREFIX_DIR_PATH;
+        if (interpreter.startsWith(prefix) || interpreter.startsWith(compatPrefix)) {
+            return true;
+        }
+
+        Logger.logError(LOG_TAG, "Bootstrap shebang mismatch: " + filePath + " -> " + interpreter);
+        return false;
+    }
+
+    private static String readFirstLine(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(filePath)))) {
+            return reader.readLine();
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to read file \"" + filePath + "\": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static boolean isBootstrapBinaryAbiSupported(String filePath) {
+        String mismatch = getBootstrapAbiMismatchMessage(filePath);
+        if (mismatch != null) {
+            Logger.logError(LOG_TAG, mismatch);
+            return false;
+        }
+        return true;
+    }
+
+    private static String getBootstrapAbiMismatchMessage() {
+        return getBootstrapAbiMismatchMessage(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash");
+    }
+
+    private static String getBootstrapAbiMismatchMessage(String filePath) {
+        ElfInfo info = readElfInfo(filePath);
+        if (info == null) {
+            return "Failed to read ELF header for bootstrap binary: " + filePath;
+        }
+
+        String[] deviceAbis = getDeviceSupportedAbis();
+        if (isElfCompatibleWithAbis(info, deviceAbis)) return null;
+
+        return "Bootstrap CPU ABI mismatch.\n"
+            + "- Detected bootstrap ABI: " + getElfAbiName(info) + "\n"
+            + "- Device ABIs: " + Arrays.toString(deviceAbis) + "\n"
+            + "Rebuild the APK for the target ABI and reinstall.";
+    }
+
+    private static String[] getDeviceSupportedAbis() {
+        if (Build.SUPPORTED_ABIS != null && Build.SUPPORTED_ABIS.length > 0) {
+            return Build.SUPPORTED_ABIS;
+        }
+        if (Build.CPU_ABI2 != null && !Build.CPU_ABI2.isEmpty()) {
+            return new String[] { Build.CPU_ABI, Build.CPU_ABI2 };
+        }
+        return new String[] { Build.CPU_ABI };
+    }
+
+    private static boolean isElfCompatibleWithAbis(ElfInfo info, String[] abis) {
+        if (abis == null || abis.length == 0) return false;
+        for (String abi : abis) {
+            if ("arm64-v8a".equals(abi)) {
+                if (info.eMachine == 183 && info.elfClass == 2) return true;
+            } else if ("armeabi-v7a".equals(abi) || "armeabi".equals(abi)) {
+                if (info.eMachine == 40 && info.elfClass == 1) return true;
+            } else if ("x86_64".equals(abi)) {
+                if (info.eMachine == 62 && info.elfClass == 2) return true;
+            } else if ("x86".equals(abi)) {
+                if (info.eMachine == 3 && info.elfClass == 1) return true;
+            }
+        }
+        return false;
+    }
+
+    private static String getElfAbiName(ElfInfo info) {
+        if (info.eMachine == 183) return (info.elfClass == 2) ? "arm64-v8a" : "arm64";
+        if (info.eMachine == 40) return "armeabi-v7a";
+        if (info.eMachine == 62) return "x86_64";
+        if (info.eMachine == 3) return "x86";
+        return "unknown(machine=" + info.eMachine + ", class=" + info.elfClass + ")";
+    }
+
+    private static ElfInfo readElfInfo(String filePath) {
+        byte[] header = new byte[20];
+        try (FileInputStream input = new FileInputStream(filePath)) {
+            int read = input.read(header);
+            if (read < header.length) return null;
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to read ELF header for \"" + filePath + "\": " + e.getMessage());
+            return null;
+        }
+
+        if (header[0] != 0x7f || header[1] != 'E' || header[2] != 'L' || header[3] != 'F') {
+            return null;
+        }
+
+        int elfClass = header[4] & 0xff;
+        int elfData = header[5] & 0xff;
+        int eMachine;
+        if (elfData == 2) {
+            eMachine = ((header[18] & 0xff) << 8) | (header[19] & 0xff);
+        } else {
+            eMachine = (header[18] & 0xff) | ((header[19] & 0xff) << 8);
+        }
+
+        return new ElfInfo(elfClass, elfData, eMachine);
+    }
+
+    private static class ElfInfo {
+        final int elfClass;
+        final int elfData;
+        final int eMachine;
+
+        ElfInfo(int elfClass, int elfData, int eMachine) {
+            this.elfClass = elfClass;
+            this.elfData = elfData;
+            this.eMachine = eMachine;
+        }
+    }
 
 }

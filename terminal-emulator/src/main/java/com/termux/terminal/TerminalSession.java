@@ -53,6 +53,14 @@ public final class TerminalSession extends TerminalOutput {
     /** Callback which gets notified when a session finishes or changes title. */
     TerminalSessionClient mClient;
 
+    /**
+     * 原始 PTY 输出捕获缓冲区，供 HomeFragment 轮询使用。
+     * 不经过终端模拟器（不受交替屏幕缓冲区限制），保留完整历史。
+     * 上限约 512KB，超出后丢弃前半段。全部操作在主线程（Handler），无需加锁。
+     */
+    final StringBuilder mRawCapture = new StringBuilder(8 * 1024);
+    private static final int MAX_RAW_CHARS = 512 * 1024;
+
     /** The pid of the shell process. 0 if not started and -1 if finished running. */
     int mShellPid;
 
@@ -220,6 +228,14 @@ public final class TerminalSession extends TerminalOutput {
         return mEmulator;
     }
 
+    /**
+     * 返回自会话启动以来所有 PTY 原始输出（含 ANSI 转义码）。
+     * HomeFragment 通过此方法获取完整输出历史，不受交替屏幕缓冲区限制。
+     */
+    public String getRawOutput() {
+        return mRawCapture.toString();
+    }
+
     /** Notify the {@link #mClient} that the screen has changed. */
     protected void notifyScreenUpdate() {
         mClient.onTextChanged(this);
@@ -342,6 +358,11 @@ public final class TerminalSession extends TerminalOutput {
         public void handleMessage(Message msg) {
             int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
             if (bytesRead > 0) {
+                // 捕获原始输出（在进入模拟器前），保留完整历史供 HomeFragment 读取
+                mRawCapture.append(new String(mReceiveBuffer, 0, bytesRead, StandardCharsets.UTF_8));
+                if (mRawCapture.length() > MAX_RAW_CHARS) {
+                    mRawCapture.delete(0, MAX_RAW_CHARS / 2);
+                }
                 mEmulator.append(mReceiveBuffer, bytesRead);
                 notifyScreenUpdate();
             }

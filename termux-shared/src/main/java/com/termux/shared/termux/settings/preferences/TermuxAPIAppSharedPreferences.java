@@ -35,10 +35,14 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
     @Nullable
     public static TermuxAPIAppSharedPreferences build(@NonNull final Context context) {
         Context termuxAPIPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_API_PACKAGE_NAME);
-        if (termuxAPIPackageContext == null)
-            return null;
-        else
-            return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
+        if (termuxAPIPackageContext == null) {
+            if (TermuxConstants.TERMUX_PACKAGE_NAME.equals(context.getPackageName())) {
+                termuxAPIPackageContext = context;
+            } else {
+                return null;
+            }
+        }
+        return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
     }
 
     /**
@@ -52,10 +56,14 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
      */
     public static TermuxAPIAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
         Context termuxAPIPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_API_PACKAGE_NAME, exitAppOnError);
-        if (termuxAPIPackageContext == null)
-            return null;
-        else
-            return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
+        if (termuxAPIPackageContext == null) {
+            if (TermuxConstants.TERMUX_PACKAGE_NAME.equals(context.getPackageName())) {
+                termuxAPIPackageContext = context;
+            } else {
+                return null;
+            }
+        }
+        return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
     }
 
 

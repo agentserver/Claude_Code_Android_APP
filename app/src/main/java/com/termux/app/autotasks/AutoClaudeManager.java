@@ -1,0 +1,207 @@
+package com.termux.app.autotasks;
+
+import androidx.annotation.NonNull;
+
+import com.termux.app.TermuxActivity;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
+/**
+ * Phase 3: 自动在 Ubuntu 内安装并配置 Claude Code。
+ *
+ * 工作原理：
+ * 1. 构造时在后台将交互式安装脚本写入 Termux $HOME/.claude-inner-setup.sh
+ * 2. AutoUbuntuManager 在 Ubuntu 安装/登录前将该脚本复制到 Ubuntu rootfs 的
+ *    /root/.claude-setup.sh，并在 /root/.bashrc 中追加 source hook
+ * 3. Ubuntu 首次登录时 .bashrc 自动触发安装向导（一次性，完成后自我清除）
+ */
+public class AutoClaudeManager {
+
+    /** Termux $HOME 下的 inner 脚本相对路径（相对于 filesDir）。
+     *  AutoUbuntuManager 用此路径做注入，两边保持一致。 */
+    static final String INNER_SCRIPT_REL = "home/.claude-inner-setup.sh";
+
+    private final TermuxActivity mActivity;
+
+    public AutoClaudeManager(@NonNull TermuxActivity activity) {
+        mActivity = activity;
+        // 后台写脚本，Ubuntu 安装需要几分钟，有充足时间在注入前写完
+        Thread t = new Thread(this::writeInnerScript, "claude-setup-write");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 返回 inner 脚本的绝对路径（固定路径，不依赖后台线程完成状态）。 */
+    @NonNull
+    public String getInnerScriptPath() {
+        return new File(mActivity.getFilesDir(), INNER_SCRIPT_REL).getAbsolutePath();
+    }
+
+    // -------------------------------------------------------------------------
+    // 后台：写入交互式安装脚本
+    // -------------------------------------------------------------------------
+
+    private void writeInnerScript() {
+        File scriptFile = new File(mActivity.getFilesDir(), INNER_SCRIPT_REL);
+        try {
+            scriptFile.getParentFile().mkdirs();
+            try (FileWriter w = new FileWriter(scriptFile)) {
+                w.write(buildClaudeInnerScript());
+            }
+        } catch (IOException ignored) {
+            // 写失败时注入步骤因文件不存在而静默跳过
+        }
+    }
+
+    /**
+     * 返回在 Ubuntu 内运行的交互式安装脚本内容（bash，从 .bashrc 被 source）。
+     *
+     * 流程：
+     *   1. 幂等保护：claude 已存在 → 自我清除后返回
+     *   2. 安装 curl（Ubuntu minimal 可能缺失）
+     *   3. 安装 Node.js LTS（NodeSource → 系统 apt 兜底）
+     *   4. 配置 npmmirror（加速国内下载）
+     *   5. npm install -g @anthropic-ai/claude-code
+     *   6. 交互：选择认证方式（API key / 官方登录）
+     *      - API key：选择接入点（官方 / 中科院镜像 / 自定义），写入 ~/.bashrc + ~/.claude.json
+     *   7. 自我清除（从 .bashrc 移除 hook，删除脚本文件）
+     */
+    private String buildClaudeInnerScript() {
+        StringBuilder s = new StringBuilder();
+
+        s.append("#!/bin/bash\n");
+        s.append("# Claude Code auto-setup (sourced from ~/.bashrc on first Ubuntu login)\n\n");
+
+        // ── 幂等保护：claude 已安装则自我清除并退出 ──────────────────────────
+        s.append("if command -v claude >/dev/null 2>&1; then\n");
+        s.append("    sed -i '/.claude-setup/d' ~/.bashrc 2>/dev/null\n");
+        s.append("    rm -f ~/.claude-setup.sh\n");
+        s.append("    return 0 2>/dev/null || exit 0\n");
+        s.append("fi\n\n");
+
+        // ── 欢迎界面 ─────────────────────────────────────────────────────────
+        s.append("echo ''\n");
+        s.append("echo '================================'\n");
+        s.append("echo '  Claude Code 首次配置'\n");
+        s.append("echo '================================'\n");
+        s.append("echo ''\n\n");
+
+        // ── Step 1: 切换 Ubuntu apt 镜像（清华，加速国内下载）─────────────────
+        // Ubuntu 25.10 系统 apt 自带 Node.js 22.x，无需 NodeSource；
+        // 但默认源在国内极慢，先切镜像再 update，避免卡住。
+        s.append("export DEBIAN_FRONTEND=noninteractive\n");
+        s.append("_codename=$(. /etc/os-release 2>/dev/null && ")
+         .append("echo \"${UBUNTU_CODENAME:-${VERSION_CODENAME:-questing}}\")\n");
+        s.append("if ! grep -qF 'tuna.tsinghua.edu.cn' /etc/apt/sources.list 2>/dev/null; then\n");
+        s.append("    echo \"[*] 切换 apt 源 -> 清华镜像 (${_codename})...\"\n");
+        s.append("    cat > /etc/apt/sources.list << EOF\n");
+        s.append("deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${_codename} main restricted universe multiverse\n");
+        s.append("deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${_codename}-updates main restricted universe multiverse\n");
+        s.append("deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${_codename}-security main restricted universe multiverse\n");
+        s.append("deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${_codename}-backports main restricted universe multiverse\n");
+        s.append("EOF\n");
+        s.append("fi\n\n");
+
+        // ── Step 2: 安装 Node.js（系统 apt，Ubuntu 25.10 自带 22.x）──────────
+        // 去掉管道过滤，让 apt 直接输出到终端，用户可以看到实时进度。
+        s.append("if ! command -v node >/dev/null 2>&1; then\n");
+        s.append("    echo '[1/3] 正在更新软件包索引（apt-get update）...'\n");
+        s.append("    apt-get update 2>&1\n");
+        s.append("    echo '[2/3] 正在安装 Node.js + npm + curl...'\n");
+        s.append("    apt-get install -y --no-install-recommends nodejs npm curl 2>&1\n");
+        s.append("fi\n");
+        // 即使 node 已存在，也确保 curl 就绪
+        s.append("command -v curl >/dev/null 2>&1 || {\n");
+        s.append("    echo '[*] 正在安装 curl...'\n");
+        s.append("    apt-get install -y --no-install-recommends curl 2>&1\n");
+        s.append("}\n\n");
+
+        s.append("if ! command -v node >/dev/null 2>&1; then\n");
+        s.append("    echo '[!] Node.js 安装失败，请检查网络后重试。'\n");
+        s.append("    return 1 2>/dev/null || exit 1\n");
+        s.append("fi\n");
+        s.append("echo \"[*] Node.js $(node --version) / npm $(npm --version) 就绪\"\n\n");
+
+        // ── Step 3: npm 镜像（npmmirror，加速 claude-code 下载）─────────────
+        s.append("npm config set registry https://registry.npmmirror.com 2>/dev/null\n\n");
+
+        // ── Step 4: 安装 claude-code ──────────────────────────────────────────
+        // 去掉 | tail -5，让 npm 进度直接输出到终端。
+        s.append("echo '[3/3] 正在安装 Claude Code（npm install -g）...'\n");
+        s.append("echo '      包较多，预计 1~3 分钟，请耐心等待...'\n");
+        s.append("npm install -g @anthropic-ai/claude-code 2>&1\n\n");
+
+        s.append("if ! command -v claude >/dev/null 2>&1; then\n");
+        s.append("    echo '[!] Claude Code 安装失败，请手动运行：'\n");
+        s.append("    echo '    npm install -g @anthropic-ai/claude-code'\n");
+        s.append("    return 1 2>/dev/null || exit 1\n");
+        s.append("fi\n");
+        s.append("echo '[*] Claude Code 安装成功'\n\n");
+
+        // ── Step 5: 认证配置 ──────────────────────────────────────────────────
+        s.append("echo ''\n");
+        s.append("echo '认证方式：'\n");
+        s.append("echo '  1) API 密钥（推荐，无需浏览器）'\n");
+        s.append("echo '  2) 官方登录（稍后在终端完成）'\n");
+        s.append("printf '选择 [1/2，默认 1]: '\n");
+        s.append("read -r _auth\n");
+        s.append("[ -z \"$_auth\" ] && _auth=1\n\n");
+
+        s.append("if [ \"$_auth\" = \"1\" ]; then\n");
+        s.append("    printf 'Anthropic API Key: '\n");
+        s.append("    read -r _key\n");
+        s.append("    if [ -n \"$_key\" ]; then\n");
+
+        // 选择接入点
+        s.append("        echo ''\n");
+        s.append("        echo 'API 接入点：'\n");
+        s.append("        echo '  1) 官方  https://api.anthropic.com'\n");
+        s.append("        echo '  2) 中科院 https://code.ai.cs.ac.cn  [国内推荐]'\n");
+        s.append("        echo '  3) 自定义 URL'\n");
+        s.append("        printf '选择 [1/2/3，默认 2]: '\n");
+        s.append("        read -r _ep\n");
+        s.append("        [ -z \"$_ep\" ] && _ep=2\n");
+        s.append("        case \"$_ep\" in\n");
+        s.append("            1) _base='' ;;\n");
+        s.append("            3) printf 'Base URL: '; read -r _base ;;\n");
+        s.append("            *) _base='https://code.ai.cs.ac.cn' ;;\n");
+        s.append("        esac\n\n");
+
+        // 写 .bashrc（幂等）
+        s.append("        grep -qF 'ANTHROPIC_API_KEY' ~/.bashrc 2>/dev/null || {\n");
+        s.append("            printf '\\n# Claude Code\\nexport ANTHROPIC_API_KEY=\"%s\"\\n' \"$_key\" >> ~/.bashrc\n");
+        s.append("            [ -n \"$_base\" ] && printf 'export ANTHROPIC_BASE_URL=\"%s\"\\n' \"$_base\" >> ~/.bashrc\n");
+        s.append("        }\n");
+        s.append("        export ANTHROPIC_API_KEY=\"$_key\"\n");
+        s.append("        [ -n \"$_base\" ] && export ANTHROPIC_BASE_URL=\"$_base\"\n\n");
+
+        // 写 ~/.claude.json 跳过 onboarding
+        s.append("        printf '{\\n  \"hasCompletedOnboarding\": true\\n}\\n' > ~/.claude.json\n");
+        s.append("        echo '[*] 配置已写入 ~/.bashrc'\n");
+        s.append("    fi\n");
+        s.append("fi\n\n");
+
+        // ── Step 6: 自我清除 ──────────────────────────────────────────────────
+        s.append("sed -i '/.claude-setup/d' ~/.bashrc 2>/dev/null\n");
+        s.append("rm -f ~/.claude-setup.sh\n\n");
+
+        // ── 完成提示 ──────────────────────────────────────────────────────────
+        s.append("echo ''\n");
+        s.append("echo '配置完成！输入 claude 启动 Claude Code'\n");
+        s.append("echo ''\n");
+        s.append("echo 'Android API 实时调用（HTTP 桥，无需 root）:'\n");
+        s.append("echo '  curl -s http://127.0.0.1:").append(ApiHttpBridgeServer.PORT)
+         .append("/battery    # 实时电量'\n");
+        s.append("echo '  curl -s http://127.0.0.1:").append(ApiHttpBridgeServer.PORT)
+         .append("/wifi       # WiFi 信息'\n");
+        s.append("echo '  curl -s http://127.0.0.1:").append(ApiHttpBridgeServer.PORT)
+         .append("/sensors    # 传感器列表'\n");
+        s.append("echo '  termux-battery-status      # /usr/local/bin 封装，同上'\n");
+        s.append("echo '================================'\n");
+        s.append("echo ''\n");
+
+        return s.toString();
+    }
+}
