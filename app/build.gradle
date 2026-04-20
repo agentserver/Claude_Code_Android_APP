@@ -132,7 +132,7 @@ android {
     // AGP 9.x 用 androidResources 替代废弃的 aaptOptions
     // 告诉打包器不要对已压缩格式二次压缩，避免 BytesSource.readAllBytes 导致 OOM
     androidResources {
-        noCompress '.gz', '.xz', '.tar', '.tar.gz', '.tar.xz', '.zip', '.br'
+        noCompress '.gz', '.tgz', '.xz', '.tar', '.tar.gz', '.tar.xz', '.zip', '.br'
     }
 
     applicationVariants.all { variant ->

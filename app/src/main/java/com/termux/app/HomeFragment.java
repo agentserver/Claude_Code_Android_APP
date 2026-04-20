@@ -11,6 +11,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -23,9 +24,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.InputStreamReader;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -59,12 +65,19 @@ public class HomeFragment extends Fragment {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
-    private RecyclerView mRecycler;
-    private ChatAdapter  mAdapter;
+    private DrawerLayout  mDrawerLayout;
+    private RecyclerView  mRecycler;
+    private ChatAdapter   mAdapter;
     private final List<ChatMessage> mMessages = new ArrayList<>();
 
     private TextView mStatusText;
+    private TextView mSessionTitle;
     private EditText mInputEdit;
+
+    // ── 历史会话抽屉 ──────────────────────────────────────────────────────
+    private SessionStore               mSessionStore;
+    private List<SessionStore.Entry>   mSessionEntries;
+    private SessionAdapter             mSessionAdapter;
 
     // ── Claude 子进程 ──────────────────────────────────────────────────────
     private Process mClaudeProcess;
@@ -73,6 +86,15 @@ public class HomeFragment extends Fragment {
     // ── 对话状态 ───────────────────────────────────────────────────────────
     private boolean mWaitingResponse = false;
     private boolean mSessionStarted  = false;   // 是否已有对话可 --continue
+
+    /** 当前捕获到的 Claude session ID（从 type=result 事件提取）。 */
+    private String  mCurrentSessionId = null;
+
+    /** 恢复特定会话时设置；null = 使用 --continue 或新建。 */
+    private String  mResumeSessionId  = null;
+
+    /** 已写入日志文件的条目数（每次 appendChatLog 时自增），用于同步时跳过已知内容。 */
+    private int mSyncedLogEntries = 0;
 
     // =========================================================================
 
@@ -88,6 +110,8 @@ public class HomeFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        mDrawerLayout = view.findViewById(R.id.home_drawer_layout);
+
         mRecycler = view.findViewById(R.id.chat_recycler);
         LinearLayoutManager lm = new LinearLayoutManager(getContext());
         lm.setStackFromEnd(true);
@@ -95,15 +119,33 @@ public class HomeFragment extends Fragment {
         mAdapter = new ChatAdapter(mMessages);
         mRecycler.setAdapter(mAdapter);
 
-        mStatusText = view.findViewById(R.id.home_status_text);
-        mInputEdit  = view.findViewById(R.id.home_input_edit);
+        mStatusText   = view.findViewById(R.id.home_status_text);
+        mSessionTitle = view.findViewById(R.id.home_session_title);
+        mInputEdit    = view.findViewById(R.id.home_input_edit);
 
+        // ── 历史会话抽屉 ──────────────────────────────────────────────────
+        mSessionStore   = new SessionStore(requireContext());
+        mSessionEntries = mSessionStore.loadAll();
+        mSessionAdapter = new SessionAdapter(mSessionEntries, mCurrentSessionId, entry -> {
+            resumeSession(entry);
+            mDrawerLayout.closeDrawers();
+        });
+        RecyclerView sessionRecycler = view.findViewById(R.id.session_recycler);
+        sessionRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        sessionRecycler.setAdapter(mSessionAdapter);
+
+        TextView emptyHint = view.findViewById(R.id.session_empty_hint);
+        emptyHint.setVisibility(mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
+
+        MaterialButton btnHistory    = view.findViewById(R.id.btn_history);
         MaterialButton btnSend       = view.findViewById(R.id.home_send_btn);
         MaterialButton btnEnter      = view.findViewById(R.id.btn_enter);
         MaterialButton btnStart      = view.findViewById(R.id.btn_start_claude);
         MaterialButton btnStop       = view.findViewById(R.id.btn_stop_claude);
         MaterialButton btnRestart    = view.findViewById(R.id.btn_restart_claude);
         MaterialButton btnNewSession = view.findViewById(R.id.btn_new_session);
+
+        btnHistory.setOnClickListener(v -> mDrawerLayout.openDrawer(android.view.Gravity.START));
 
         btnSend.setOnClickListener(v -> sendOrConfirm());
 
@@ -145,10 +187,15 @@ public class HomeFragment extends Fragment {
             scrollToBottom();
         });
 
-        // "新建会话"：清除 --continue 标志（下次发送开启全新对话）
+        // "新建会话"：清除所有会话状态，下次发送开启全新对话
         btnNewSession.setOnClickListener(v -> {
             stopClaudeProcess();
-            mSessionStarted = false;
+            mSessionStarted   = false;
+            mResumeSessionId  = null;
+            mCurrentSessionId = null;
+            mMessages.clear();
+            mAdapter.notifyDataSetChanged();
+            updateSessionTitle(null);
         });
     }
 
@@ -192,31 +239,82 @@ public class HomeFragment extends Fragment {
         mWaitingResponse = true;
         updateStatus("● 运行中", 0xFF1565C0);
 
-        final String finalKey     = apiKey;
-        final String finalBaseUrl = baseUrl;
-        final String finalText    = text;
-        final boolean doContinue  = mSessionStarted;
+        final String finalKey        = apiKey;
+        final String finalBaseUrl    = baseUrl;
+        final String finalText       = text;
+        final boolean doContinue     = mSessionStarted;
+        final String finalResumeId   = mResumeSessionId;
+
+        // resume 只用一次：第一条消息发出后切换为 --continue
+        if (mResumeSessionId != null) mResumeSessionId = null;
 
         mClaudeThread = new Thread(() -> {
-            String lastSnapshot = "";
+            String lastSnapshot     = "";
+            String capturedSessId   = "";
             try {
                 // 单引号转义：' → '\''
                 String escaped    = finalText.replace("'", "'\\''");
                 String escapedKey = finalKey.replace("'", "'\\''");
                 String escapedUrl = finalBaseUrl.replace("'", "'\\''");
 
+                String sessionFlag = (finalResumeId != null)
+                        ? " --resume " + finalResumeId
+                        : (doContinue ? " --continue" : "");
+
                 String claudeCmd = "printf '%s' '" + escaped + "'"
                         + " | ANTHROPIC_API_KEY='" + escapedKey + "'"
                         + (finalBaseUrl.isEmpty() ? "" : " ANTHROPIC_BASE_URL='" + escapedUrl + "'")
                         + " claude -p --output-format stream-json --verbose"
-                        + (doContinue ? " --continue" : "")
-                        + " 2>/dev/null";
+                        + sessionFlag;
 
                 ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu", "--", "sh", "-c", claudeCmd);
                 setupEnv(pb.environment(), finalKey, finalBaseUrl);
                 pb.redirectErrorStream(false);
 
                 mClaudeProcess = pb.start();
+
+                // 先把用户消息追加到日志文件
+                appendChatLog("你", finalText);
+
+                // 独立线程读取 stderr，剥离 ANSI 转义码后显示为 SYSTEM 消息（过滤 proot 噪声）
+                Process capturedProcess = mClaudeProcess;
+                Thread stderrThread = new Thread(() -> {
+                    try {
+                        BufferedReader err = new BufferedReader(
+                                new InputStreamReader(capturedProcess.getErrorStream()));
+                        StringBuilder block = new StringBuilder();
+                        String errLine;
+                        while ((errLine = err.readLine()) != null) {
+                            String stripped = stripAnsi(errLine).trim();
+                            // 过滤 proot-distro 自身的底层警告（对用户无意义）
+                            if (stripped.startsWith("proot warning:")
+                                    || stripped.startsWith("proot info:")
+                                    || stripped.isEmpty()) {
+                                if (stripped.isEmpty() && block.length() > 0) {
+                                    final String msg = block.toString().trim();
+                                    block.setLength(0);
+                                    mHandler.post(() -> {
+                                        mAdapter.addMessage(ChatMessage.system(msg));
+                                        scrollToBottom();
+                                    });
+                                }
+                                continue;
+                            }
+                            if (block.length() > 0) block.append("\n");
+                            block.append(stripped);
+                        }
+                        if (block.length() > 0) {
+                            final String msg = block.toString().trim();
+                            mHandler.post(() -> {
+                                mAdapter.addMessage(ChatMessage.system(msg));
+                                scrollToBottom();
+                            });
+                        }
+                    } catch (Exception ignored) {}
+                }, "ClaudeStderr");
+                stderrThread.setDaemon(true);
+                stderrThread.start();
+
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(mClaudeProcess.getInputStream()));
 
@@ -224,6 +322,17 @@ public class HomeFragment extends Fragment {
                 while ((line = reader.readLine()) != null) {
                     String t = line.trim();
                     if (!t.startsWith("{")) continue;
+                    // type=system init：显示工作区 / 模型信息
+                    String sysInfo = extractSystemInfo(t);
+                    if (sysInfo != null) {
+                        final String info = sysInfo;
+                        mHandler.post(() -> { mAdapter.addMessage(ChatMessage.system(info)); scrollToBottom(); });
+                        continue;
+                    }
+                    // type=result：捕获 session_id
+                    String sid = extractSessionId(t);
+                    if (sid != null) { capturedSessId = sid; continue; }
+                    // type=assistant：更新回复气泡
                     String snap = extractText(t);
                     if (snap != null) {
                         lastSnapshot = snap;
@@ -234,17 +343,27 @@ public class HomeFragment extends Fragment {
                 mClaudeProcess.waitFor();
 
             } catch (InterruptedException ignored) {
-                // 被 stopClaudeProcess() 中断，正常退出
             } catch (Exception e) {
                 final String err = e.getMessage();
                 mHandler.post(() -> mAdapter.updateLastAssistant("⚠ 进程错误：" + err));
             }
 
-            final String finalSnap = lastSnapshot;
+            final String finalSnap    = lastSnapshot;
+            final String finalSessId  = capturedSessId;
+            if (!finalSnap.isEmpty()) appendChatLog("Claude", finalSnap);
+            // 保存会话到历史记录
+            if (!finalSessId.isEmpty()) {
+                mSessionStore.add(finalSessId, System.currentTimeMillis(), finalText);
+            }
             mHandler.post(() -> {
                 if (finalSnap.isEmpty()) dropPlaceholder();
-                mWaitingResponse = false;
-                mSessionStarted  = true;
+                mWaitingResponse  = false;
+                mSessionStarted   = true;
+                // 更新当前 session ID 并刷新抽屉
+                if (!finalSessId.isEmpty() && !finalSessId.equals(mCurrentSessionId)) {
+                    mCurrentSessionId = finalSessId;
+                    refreshSessionDrawer();
+                }
                 updateStatus("● 就绪", 0xFF2E7D32);
             });
         }, "ClaudeProcess");
@@ -278,6 +397,77 @@ public class HomeFragment extends Fragment {
         if (baseUrl != null && !baseUrl.isEmpty()) {
             env.put("ANTHROPIC_BASE_URL", baseUrl);
         }
+    }
+
+    // =========================================================================
+    // JSONL：解析 type=system 初始化事件
+    // =========================================================================
+
+    /**
+     * 从 type=system subtype=init 事件中提取工作区和模型信息，
+     * 替代 TTY 模式下的 workspace trust 对话框。
+     * 返回 null 表示不是 system init 事件。
+     */
+    /** 从 type=result 事件中提取 session_id，供 --resume 使用。 */
+    @Nullable
+    private String extractSessionId(String jsonLine) {
+        if (!jsonLine.contains("\"type\":\"result\"")) return null;
+        try {
+            JSONObject obj = new JSONObject(jsonLine);
+            if (!"result".equals(obj.optString("type"))) return null;
+            String sid = obj.optString("session_id", "");
+            return sid.isEmpty() ? null : sid;
+        } catch (Exception ignored) { return null; }
+    }
+
+    private String extractSystemInfo(String jsonLine) {
+        if (!jsonLine.contains("\"type\":\"system\"")) return null;
+        try {
+            JSONObject obj = new JSONObject(jsonLine);
+            if (!"system".equals(obj.optString("type"))) return null;
+            if (!"init".equals(obj.optString("subtype"))) return null;
+            String cwd   = obj.optString("cwd", "");
+            String model = obj.optString("model", "");
+            if (cwd.isEmpty() && model.isEmpty()) return null;
+            StringBuilder sb = new StringBuilder("工作区：").append(cwd.isEmpty() ? "/" : cwd);
+            if (!model.isEmpty()) sb.append("  |  模型：").append(model);
+            return sb.toString();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    // =========================================================================
+    // 对话日志（~/chat_history.log，终端里可 tail -f 查看）
+    // =========================================================================
+
+    private void appendChatLog(String role, String content) {
+        try {
+            String logPath = TermuxConstants.TERMUX_HOME_DIR_PATH + "/chat_history.log";
+            String ts = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
+            String entry = "[" + ts + "] " + role + "\n" + content + "\n\n";
+            BufferedWriter bw = new BufferedWriter(new FileWriter(logPath, true));
+            bw.write(entry);
+            bw.close();
+            mSyncedLogEntries++; // 记录已知条目数，同步时跳过它
+        } catch (Exception ignored) {}
+    }
+
+    // =========================================================================
+    // 工具：剥离 ANSI/VT100 转义序列
+    // =========================================================================
+
+    /** 去掉终端控制码，只保留可打印文字。 */
+    private static String stripAnsi(String s) {
+        // ESC [ ... 参数 最终字母  (CSI 序列)
+        s = s.replaceAll("\u001B\\[[0-9;?]*[A-Za-z]", "");
+        // ESC 单字母序列（如 ESC c, ESC M 等）
+        s = s.replaceAll("\u001B[^\\[\\]]", "");
+        // OSC 序列 ESC ] ... BEL/ST
+        s = s.replaceAll("\u001B][^\u0007\u001B]*(\u0007|\u001B\\\\)", "");
+        // 其余控制字符（CR、BEL 等），保留 \n
+        s = s.replaceAll("[\u0000-\u0008\u000B-\u001A\u001C-\u001F\u007F]", "");
+        return s;
     }
 
     // =========================================================================
@@ -345,6 +535,37 @@ public class HomeFragment extends Fragment {
     // 工具方法
     // =========================================================================
 
+    /** 从历史列表恢复指定会话：清空 UI、设置 resume ID、更新标题。 */
+    private void resumeSession(SessionStore.Entry entry) {
+        stopClaudeProcess();
+        mMessages.clear();
+        mAdapter.notifyDataSetChanged();
+        mResumeSessionId  = entry.id;
+        mCurrentSessionId = entry.id;
+        mSessionStarted   = false;
+        mAdapter.addMessage(ChatMessage.system("已切换到历史对话：" + entry.formatTime()));
+        scrollToBottom();
+        updateSessionTitle(entry.preview);
+        mSessionAdapter.setActiveId(entry.id);
+    }
+
+    /** 重新从 SessionStore 加载列表，刷新抽屉。 */
+    private void refreshSessionDrawer() {
+        mSessionEntries.clear();
+        mSessionEntries.addAll(mSessionStore.loadAll());
+        mSessionAdapter.setActiveId(mCurrentSessionId);
+    }
+
+    /** 更新顶栏标题；preview 为 null 时显示默认 "Claude Code"。 */
+    private void updateSessionTitle(@Nullable String preview) {
+        if (mSessionTitle == null) return;
+        if (preview == null || preview.isEmpty()) {
+            mSessionTitle.setText("Claude Code");
+        } else {
+            mSessionTitle.setText(preview.length() > 30 ? preview.substring(0, 30) + "…" : preview);
+        }
+    }
+
     private void updateStatus(String text, int color) {
         if (mStatusText != null) {
             mStatusText.setText(text);
@@ -358,11 +579,32 @@ public class HomeFragment extends Fragment {
         if (a != null) a.sendTerminalInput(text);
     }
 
-    private void scrollToBottom() {
+    public void scrollToBottom() {
         mRecycler.post(() -> {
             int last = mAdapter.getItemCount() - 1;
             if (last >= 0) mRecycler.smoothScrollToPosition(last);
         });
+    }
+
+    /**
+     * 由 TermuxActivity.syncChatLogToHome() 在主线程调用。
+     * 传入日志文件解析后的所有条目，只把第 mSyncedLogEntries 条之后的新内容加入 UI。
+     * entries: 每项为 [header, body]，header 形如 "[14:32:01] 你"。
+     */
+    public void syncFromLog(java.util.List<String[]> entries) {
+        int start = mSyncedLogEntries; // 跳过本 Fragment 自己写过的条目
+        for (int i = start; i < entries.size(); i++) {
+            String header = entries.get(i)[0];
+            String body   = entries.get(i)[1];
+            if (header.contains("] 你")) {
+                mAdapter.addMessage(ChatMessage.user(body));
+            } else if (header.contains("] Claude")) {
+                mAdapter.addMessage(ChatMessage.assistant(body));
+            } else {
+                mAdapter.addMessage(ChatMessage.system(body));
+            }
+            mSyncedLogEntries++;
+        }
     }
 
     private void dropPlaceholder() {

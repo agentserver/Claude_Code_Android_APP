@@ -11,13 +11,18 @@ public class AutoTaskCoordinator {
     private final ApiHttpBridgeServer mApiHttpBridgeServer;
     @SuppressWarnings("FieldCanBeLocal")
     private final AutoClaudeManager mAutoClaudeManager;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final AutoAgentServerManager mAutoAgentServerManager;
     private boolean mEnabled = true;
 
     public AutoTaskCoordinator(@NonNull TermuxActivity activity) {
-        // AutoClaudeManager 先初始化：后台写 inner 脚本，Ubuntu 安装需要几分钟，有充足准备时间
+        // AutoClaudeManager / AutoAgentServerManager 先初始化：后台写 inner 脚本，
+        // Ubuntu 安装需要几分钟，有充足准备时间
         mAutoClaudeManager = new AutoClaudeManager(activity);
+        mAutoAgentServerManager = new AutoAgentServerManager(activity);
         mApiSelfCheckManager = new ApiSelfCheckManager(activity);
         mAutoUbuntuManager = new AutoUbuntuManager(activity);
+        mAutoUbuntuManager.setAgentServerManager(mAutoAgentServerManager);
         // HTTP API 桥：Android API → localhost HTTP，供 Ubuntu 内 Claude Code 通过 curl 实时调用
         mApiHttpBridgeServer = new ApiHttpBridgeServer(activity);
         mApiHttpBridgeServer.start();

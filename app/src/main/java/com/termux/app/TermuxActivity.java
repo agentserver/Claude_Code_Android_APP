@@ -950,12 +950,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int id = item.getItemId();
             if (id == R.id.nav_home) {
                 showHomeMode();
+                syncChatLogToHome();   // 把日志里的新内容补充到 Chat UI
                 return true;
             } else if (id == R.id.nav_terminal) {
                 showTerminalMode();
+                showChatLogInTerminal(); // 自动在终端显示对话历史
                 return true;
             } else if (id == R.id.nav_apikey) {
                 showApiKeyMode();
+                return true;
+            } else if (id == R.id.nav_agentserver) {
+                showAgentServerMode();
                 return true;
             }
             return false;
@@ -979,14 +984,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
         androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
-        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
-        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment homeF  = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF   = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF = fm.findFragmentByTag("agentserver");
         if (homeF == null) {
             ft.add(R.id.home_fragment_container, new HomeFragment(), "home");
         } else {
             ft.show(homeF);
         }
-        if (apiF != null) ft.hide(apiF);
+        if (apiF   != null) ft.hide(apiF);
+        if (agentF != null) ft.hide(agentF);
         ft.commit();
     }
 
@@ -1006,14 +1013,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
         androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
-        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
-        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment homeF  = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF   = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF = fm.findFragmentByTag("agentserver");
         if (apiF == null) {
             ft.add(R.id.home_fragment_container, new ApiKeyFragment(), "apikey");
         } else {
             ft.show(apiF);
         }
+        if (homeF  != null) ft.hide(homeF);
+        if (agentF != null) ft.hide(agentF);
+        ft.commit();
+    }
+
+    /** 切换到 AgentServer 配置页面。 */
+    private void showAgentServerMode() {
+        DrawerLayout drawer = getDrawer();
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        View container = findViewById(R.id.home_fragment_container);
+        if (drawer == null || container == null) return;
+
+        if (drawer.isDrawerOpen(android.view.Gravity.START))
+            drawer.closeDrawer(android.view.Gravity.START);
+
+        drawer.setVisibility(View.GONE);
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
+        container.setVisibility(View.VISIBLE);
+
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF  = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF   = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF = fm.findFragmentByTag("agentserver");
+        if (agentF == null) {
+            ft.add(R.id.home_fragment_container, new AgentServerFragment(), "agentserver");
+        } else {
+            ft.show(agentF);
+        }
         if (homeF != null) ft.hide(homeF);
+        if (apiF  != null) ft.hide(apiF);
         ft.commit();
     }
 
@@ -1029,10 +1067,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // 隐藏所有非终端 Fragment（保留实例，不销毁）
         androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
         androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
-        androidx.fragment.app.Fragment homeF = fm.findFragmentByTag("home");
-        androidx.fragment.app.Fragment apiF  = fm.findFragmentByTag("apikey");
-        if (homeF != null) ft.hide(homeF);
-        if (apiF  != null) ft.hide(apiF);
+        androidx.fragment.app.Fragment homeF  = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF   = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF = fm.findFragmentByTag("agentserver");
+        if (homeF  != null) ft.hide(homeF);
+        if (apiF   != null) ft.hide(apiF);
+        if (agentF != null) ft.hide(agentF);
         ft.commit();
 
         // 按用户设置决定是否恢复 extra keys 工具栏
@@ -1040,6 +1080,104 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (toolbar != null && mPreferences != null && mPreferences.shouldShowTerminalToolbar()) {
             toolbar.setVisibility(View.VISIBLE);
         }
+    }
+
+    /**
+     * 切换到终端 Tab 时，把尚未注入的对话条目直接写入 TerminalEmulator 显示缓冲区。
+     * emulator.append() 始终在主线程（Handler.handleMessage）调用，此处同样在主线程，无竞态。
+     * 终端 View 已可见时注入，onTextChanged → onScreenUpdated 立即触发重绘。
+     */
+    private void showChatLogInTerminal() {
+        TerminalSession session = getCurrentSession();
+        if (session == null || session.getEmulator() == null) return;
+
+        String logPath = com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH
+                + "/chat_history.log";
+        java.io.File logFile = new java.io.File(logPath);
+        if (!logFile.exists()) return;
+
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(logFile.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            java.util.List<String[]> entries = new java.util.ArrayList<>();
+            for (String block : content.split("\n\n")) {
+                String trimmed = block.trim();
+                if (trimmed.isEmpty()) continue;
+                int nl = trimmed.indexOf('\n');
+                if (nl < 0) continue;
+                String header = trimmed.substring(0, nl).trim();
+                String body   = trimmed.substring(nl + 1).trim();
+                if (!body.isEmpty()) entries.add(new String[]{header, body});
+            }
+
+            // 只注入上次之后新增的条目
+            if (mTerminalInjectedCount >= entries.size()) return;
+
+            StringBuilder sb = new StringBuilder();
+            if (mTerminalInjectedCount == 0) {
+                sb.append("\r\n\033[1;37m──── Chat History ────\033[0m\r\n");
+            }
+            for (int i = mTerminalInjectedCount; i < entries.size(); i++) {
+                String header = entries.get(i)[0]; // e.g. "[14:32:01] 你"
+                String body   = entries.get(i)[1];
+                // 判断角色，着色
+                boolean isUser = header.contains("] 你");
+                String color   = isUser ? "\033[1;34m" : "\033[1;32m";
+                sb.append(color).append(header).append("\033[0m\r\n");
+                // 多行内容：每个 \n 替换为 \r\n
+                sb.append(body.replace("\n", "\r\n")).append("\r\n\r\n");
+                mTerminalInjectedCount++;
+            }
+
+            byte[] bytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            session.getEmulator().append(bytes, bytes.length);
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onTextChanged(session);
+        } catch (Exception ignored) {}
+    }
+
+    /** 已注入终端的对话条目数，避免重复显示。 */
+    private int mTerminalInjectedCount = 0;
+
+    /**
+     * 切换回主页 Tab 时，解析日志文件并把尚未显示的条目通过 HomeFragment.syncFromLog() 补充进去。
+     * 日志格式：每条 "[HH:mm:ss] 角色\n内容\n\n"。
+     */
+    private void syncChatLogToHome() {
+        androidx.fragment.app.Fragment f = getSupportFragmentManager().findFragmentByTag("home");
+        if (!(f instanceof HomeFragment)) return;
+        HomeFragment home = (HomeFragment) f;
+
+        new Thread(() -> {
+            try {
+                String logPath = com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH
+                        + "/chat_history.log";
+                java.io.File logFile = new java.io.File(logPath);
+                if (!logFile.exists()) return;
+
+                String content = new String(java.nio.file.Files.readAllBytes(logFile.toPath()),
+                        java.nio.charset.StandardCharsets.UTF_8);
+
+                java.util.List<String[]> entries = new java.util.ArrayList<>();
+                for (String block : content.split("\n\n")) {
+                    String trimmed = block.trim();
+                    if (trimmed.isEmpty()) continue;
+                    int nl = trimmed.indexOf('\n');
+                    if (nl < 0) continue;
+                    String header = trimmed.substring(0, nl).trim();
+                    String body   = trimmed.substring(nl + 1).trim();
+                    if (!body.isEmpty()) entries.add(new String[]{header, body});
+                }
+
+                if (!entries.isEmpty()) {
+                    final java.util.List<String[]> finalEntries = entries;
+                    runOnUiThread(() -> {
+                        home.syncFromLog(finalEntries);
+                        home.scrollToBottom();
+                    });
+                }
+            } catch (Exception ignored) {}
+        }, "SyncChatLog").start();
     }
 
     // ── HomeFragment 调用的公共方法 ──────────────────────────────────────────

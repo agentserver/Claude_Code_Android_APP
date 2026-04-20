@@ -38,6 +38,7 @@ public class AutoUbuntuManager {
     };
 
     private final TermuxActivity mActivity;
+    private AutoAgentServerManager mAgentServerManager;
     private boolean mAutoLaunchAttempted;
     private boolean mEnabled = true;
 
@@ -49,6 +50,11 @@ public class AutoUbuntuManager {
         mActivity = activity;
         // 后台提前提取 assets 中的 rootfs，减少等待时间
         startRootfsExtraction();
+    }
+
+    /** 注入 AgentServer 管理器引用，用于在复制安装包前确认提取完成。 */
+    public void setAgentServerManager(@NonNull AutoAgentServerManager mgr) {
+        mAgentServerManager = mgr;
     }
 
     public void setEnabled(boolean enabled) {
@@ -73,6 +79,10 @@ public class AutoUbuntuManager {
             while (!mExtractionDone && System.currentTimeMillis() < deadline) {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) { break; }
             }
+        }
+        // 等待 AgentServer asset 提取完成（最多 5 秒），避免 cp 时文件不存在被静默跳过
+        if (mAgentServerManager != null) {
+            mAgentServerManager.awaitExtraction(5000);
         }
 
         // 脚本写入临时文件再执行，避免超长单行命令超出 pty 输入缓冲区（N_TTY_BUF_SIZE=4096）被截断
@@ -411,6 +421,10 @@ public class AutoUbuntuManager {
             AutoClaudeManager.INNER_SCRIPT_REL).getAbsolutePath();
         String capabilitiesPath = new File(mActivity.getFilesDir(),
             CapabilitiesManager.CAPABILITIES_FILE_REL).getAbsolutePath();
+        String agentTgzPath = new File(mActivity.getFilesDir(),
+            AutoAgentServerManager.ASSET_TGZ_REL).getAbsolutePath();
+        String agentInnerPath = new File(mActivity.getFilesDir(),
+            AutoAgentServerManager.INNER_SCRIPT_REL).getAbsolutePath();
         sb.append("if [ \"$auto_ok\" = \"1\" ]; then ")
           .append("_ubr=\"$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu\"; ")
           .append("_cis=\"").append(claudeInnerPath).append("\"; ")
@@ -419,6 +433,17 @@ public class AutoUbuntuManager {
           .append("[ -f \"$_cis\" ] && cp \"$_cis\" \"$_ubr/root/.claude-setup.sh\" && ")
           .append("{ grep -qF '.claude-setup' \"$_ubr/root/.bashrc\" 2>/dev/null || ")
           .append("printf '\\n[ -f ~/.claude-setup.sh ] && . ~/.claude-setup.sh\\n' ")
+          .append(">> \"$_ubr/root/.bashrc\"; }; ")
+          // 注入 AgentServer 安装包 + 安装向导（在 Claude hook 之后，确保安装时 Claude 已就绪）
+          .append("if [ -f \"").append(agentTgzPath).append("\" ] && [ -s \"").append(agentTgzPath).append("\" ]; then ")
+          .append("mkdir -p \"$_ubr/tmp\" && ")
+          .append("cp \"").append(agentTgzPath).append("\" \"$_ubr/tmp/agentserver-linux-arm64.tar.gz\" && ")
+          .append("echo \"[*] agentserver 安装包已复制到 Ubuntu /tmp/\"; ")
+          .append("else echo \"[!] agentserver 安装包未就绪（路径: ").append(agentTgzPath).append("），将由脚本联网下载\"; fi; ")
+          .append("[ -f \"").append(agentInnerPath).append("\" ] && ")
+          .append("cp \"").append(agentInnerPath).append("\" \"$_ubr/root/.agentserver-setup.sh\" && ")
+          .append("{ grep -qF '.agentserver-setup' \"$_ubr/root/.bashrc\" 2>/dev/null || ")
+          .append("printf '\\n[ -f ~/.agentserver-setup.sh ] && . ~/.agentserver-setup.sh\\n' ")
           .append(">> \"$_ubr/root/.bashrc\"; }; ")
           // 建 capabilities.json 软链接：Ubuntu 内 ~/capabilities.json -> Termux home 的文件
           .append("ln -sf \"").append(capabilitiesPath).append("\" ")
@@ -443,7 +468,7 @@ public class AutoUbuntuManager {
           .append("printf '#!/bin/sh\\ncurl -sf http://127.0.0.1:%s/clipboard\\n' \"$_bp\" ")
           .append("> \"$_ubr/usr/local/bin/termux-clipboard-get\" && ")
           .append("chmod +x \"$_ubr/usr/local/bin/termux-clipboard-get\" 2>/dev/null; ")
-          .append("echo \"[*] Claude setup + capabilities ready.\"; fi; fi; ");
+          .append("echo \"[*] Claude + AgentServer setup + capabilities ready.\"; fi; fi; ");
 
         // ── Step 3: 登录 Ubuntu ───────────────────────────────────────────────
         // 登录策略：依次尝试四种组合，直到成功（用 || 链：前一个非零退出才执行下一个）。

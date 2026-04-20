@@ -1,191 +1,258 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/home_drawer_layout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#FFFFFF">
+    android:layout_height="match_parent">
 
-    <!-- 状态栏 -->
+    <!-- ── 主内容区 ─────────────────────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:background="#F5F5F5"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Claude Code"
-            android:textColor="#212121"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/home_status_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="● 等待中"
-            android:textColor="#888888"
-            android:textSize="12sp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:background="#E0E0E0" />
-
-    </LinearLayout>
-
-    <!-- 聊天消息列表 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/chat_recycler"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#FFFFFF"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        android:clipToPadding="false"
-        android:scrollbars="vertical" />
-
-    <!-- 底部操作区 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="#F5F5F5"
-        android:paddingStart="6dp"
-        android:paddingEnd="6dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:background="#FFFFFF">
 
-        <!-- 快捷操作按钮行 -->
+        <!-- 状态栏 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="6dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_start_claude"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="3dp"
-                android:text="启动"
-                android:textColor="#1976D2"
-                android:textSize="11sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:strokeColor="#1976D2" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_stop_claude"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginStart="3dp"
-                android:layout_marginEnd="3dp"
-                android:text="停止"
-                android:textColor="#E53935"
-                android:textSize="11sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:strokeColor="#E53935" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restart_claude"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginStart="3dp"
-                android:layout_marginEnd="3dp"
-                android:text="重启"
-                android:textColor="#F57C00"
-                android:textSize="11sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:strokeColor="#F57C00" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_new_session"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginStart="3dp"
-                android:text="新建"
-                android:textColor="#388E3C"
-                android:textSize="11sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:strokeColor="#388E3C" />
-
-        </LinearLayout>
-
-        <!-- 输入行：文本框 + ⏎ Enter 键 + 发送 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:padding="12dp"
+            android:background="#F5F5F5"
             android:gravity="center_vertical">
 
-            <EditText
-                android:id="@+id/home_input_edit"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="输入消息..."
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA"
-                android:background="#EEEEEE"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:inputType="textMultiLine|textNoSuggestions"
-                android:imeOptions="actionNone"
-                android:maxLines="4"
-                android:textSize="14sp" />
-
-            <!-- ⏎ Enter 键：向终端发送回车，用于确认 claude 内部的提示 -->
+            <!-- 历史记录按钮（≡） -->
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_enter"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="4dp"
-                android:text="⏎"
-                android:textColor="#757575"
-                android:textSize="16sp"
+                android:id="@+id/btn_history"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="≡"
+                android:textSize="20sp"
+                android:textColor="#555555"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:insetLeft="0dp"
                 android:insetRight="0dp"
                 android:paddingStart="0dp"
                 android:paddingEnd="0dp"
-                app:strokeColor="#BDBDBD" />
+                android:layout_marginEnd="4dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/home_send_btn"
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:id="@+id/home_session_title"
+                android:text="Claude Code"
+                android:textColor="#212121"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/home_status_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="发送"
-                android:textColor="@android:color/white"
-                android:backgroundTint="#1976D2"
-                android:textSize="13sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp" />
+                android:text="● 等待中"
+                android:textColor="#888888"
+                android:textSize="12sp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:background="#E0E0E0" />
+
+        </LinearLayout>
+
+        <!-- 聊天消息列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/chat_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#FFFFFF"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical" />
+
+        <!-- 底部操作区 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F5F5F5"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <!-- 快捷操作按钮行 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_start_claude"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
+                    android:text="启动"
+                    android:textColor="#1976D2"
+                    android:textSize="11sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:strokeColor="#1976D2" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_stop_claude"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:text="停止"
+                    android:textColor="#E53935"
+                    android:textSize="11sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:strokeColor="#E53935" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_restart_claude"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:text="重启"
+                    android:textColor="#F57C00"
+                    android:textSize="11sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:strokeColor="#F57C00" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_new_session"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:text="新建"
+                    android:textColor="#388E3C"
+                    android:textSize="11sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:strokeColor="#388E3C" />
+
+            </LinearLayout>
+
+            <!-- 输入行：文本框 + ⏎ + 发送 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <EditText
+                    android:id="@+id/home_input_edit"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="输入消息..."
+                    android:textColor="#212121"
+                    android:textColorHint="#AAAAAA"
+                    android:background="#EEEEEE"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:imeOptions="actionNone"
+                    android:maxLines="4"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_enter"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="4dp"
+                    android:text="⏎"
+                    android:textColor="#757575"
+                    android:textSize="16sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    app:strokeColor="#BDBDBD" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/home_send_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="发送"
+                    android:textColor="@android:color/white"
+                    android:backgroundTint="#1976D2"
+                    android:textSize="13sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
     </LinearLayout>
 
-</LinearLayout>
+    <!-- ── 左侧历史记录抽屉 ──────────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:orientation="vertical"
+        android:background="#FAFAFA"
+        android:elevation="8dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="历史对话"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#212121"
+            android:padding="16dp"
+            android:background="#F0F0F0" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/session_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:scrollbars="vertical" />
+
+        <TextView
+            android:id="@+id/session_empty_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="暂无历史记录\n完成一次对话后自动保存"
+            android:textColor="#AAAAAA"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

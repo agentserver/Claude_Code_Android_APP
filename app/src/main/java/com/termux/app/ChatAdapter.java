@@ -18,6 +18,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private static final int TYPE_USER = 0;
     private static final int TYPE_ASSISTANT = 1;
+    private static final int TYPE_SYSTEM = 2;
 
     private final List<ChatMessage> mMessages;
 
@@ -31,7 +32,11 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     @Override
     public int getItemViewType(int position) {
-        return mMessages.get(position).type == ChatMessage.Type.USER ? TYPE_USER : TYPE_ASSISTANT;
+        switch (mMessages.get(position).type) {
+            case USER:      return TYPE_USER;
+            case SYSTEM:    return TYPE_SYSTEM;
+            default:        return TYPE_ASSISTANT;
+        }
     }
 
     @NonNull
@@ -40,6 +45,8 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         if (viewType == TYPE_USER) {
             return new UserViewHolder(inflater.inflate(R.layout.item_msg_user, parent, false));
+        } else if (viewType == TYPE_SYSTEM) {
+            return new SystemViewHolder(inflater.inflate(R.layout.item_msg_system, parent, false));
         } else {
             return new AssistantViewHolder(inflater.inflate(R.layout.item_msg_assistant, parent, false));
         }
@@ -50,6 +57,8 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         ChatMessage msg = mMessages.get(position);
         if (holder instanceof UserViewHolder) {
             ((UserViewHolder) holder).bind(msg.content);
+        } else if (holder instanceof SystemViewHolder) {
+            ((SystemViewHolder) holder).bind(msg.content);
         } else {
             ((AssistantViewHolder) holder).bind(msg.content);
         }
@@ -122,6 +131,19 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         private final TextView mText;
 
         AssistantViewHolder(View itemView) {
+            super(itemView);
+            mText = itemView.findViewById(R.id.msg_text);
+        }
+
+        void bind(String content) {
+            mText.setText(content);
+        }
+    }
+
+    static class SystemViewHolder extends RecyclerView.ViewHolder {
+        private final TextView mText;
+
+        SystemViewHolder(View itemView) {
             super(itemView);
             mText = itemView.findViewById(R.id.msg_text);
         }

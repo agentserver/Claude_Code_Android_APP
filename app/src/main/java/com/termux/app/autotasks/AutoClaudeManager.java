@@ -124,18 +124,37 @@ public class AutoClaudeManager {
         s.append("fi\n");
         s.append("echo \"[*] Node.js $(node --version) / npm $(npm --version) 就绪\"\n\n");
 
-        // ── Step 3: npm 镜像（npmmirror，加速 claude-code 下载）─────────────
-        s.append("npm config set registry https://registry.npmmirror.com 2>/dev/null\n\n");
+        // ── Step 3: npm 配置（镜像 + 确保 optional 依赖不被跳过）────────────
+        // npmmirror 用于加速主包下载；optional=true 确保 ARM64 native binary 不被跳过。
+        // 注意：native binary (@anthropic-ai/claude-code-linux-arm64) 属于 optionalDependencies，
+        // 若被 npm 的 omit=optional 配置跳过，会导致 "claude native binary not installed" 错误。
+        s.append("npm config set registry https://registry.npmmirror.com 2>/dev/null\n");
+        s.append("npm config delete omit 2>/dev/null\n");           // 清除可能残留的 omit=optional
+        s.append("npm config set optional true 2>/dev/null\n\n");   // 显式允许 optional 依赖
 
         // ── Step 4: 安装 claude-code ──────────────────────────────────────────
-        // 去掉 | tail -5，让 npm 进度直接输出到终端。
         s.append("echo '[3/3] 正在安装 Claude Code（npm install -g）...'\n");
         s.append("echo '      包较多，预计 1~3 分钟，请耐心等待...'\n");
-        s.append("npm install -g @anthropic-ai/claude-code 2>&1\n\n");
+        s.append("npm install -g @anthropic-ai/claude-code --include=optional 2>&1\n\n");
+
+        // 若主包安装后 native binary 仍缺失，依次尝试两种修复方案
+        s.append("if ! claude --version >/dev/null 2>&1; then\n");
+        s.append("    echo '[*] native binary 缺失，尝试补装 ARM64 包...'\n");
+        s.append("    npm install -g @anthropic-ai/claude-code-linux-arm64 --registry https://registry.npmjs.org 2>&1 || true\n");
+        s.append("fi\n");
+        // 若仍不行，用官方内置的 JS fallback 替换 claude 命令（无需下载，稳定可用）
+        s.append("if ! claude --version >/dev/null 2>&1; then\n");
+        s.append("    _wrapper=$(npm root -g)/@anthropic-ai/claude-code/cli-wrapper.cjs\n");
+        s.append("    if [ -f \"$_wrapper\" ]; then\n");
+        s.append("        echo '[*] 使用 JS fallback 替代 native binary...'\n");
+        s.append("        printf '#!/bin/bash\\nexec node %s \"$@\"\\n' \"$_wrapper\" > /usr/local/bin/claude\n");
+        s.append("        chmod +x /usr/local/bin/claude\n");
+        s.append("    fi\n");
+        s.append("fi\n\n");
 
         s.append("if ! command -v claude >/dev/null 2>&1; then\n");
         s.append("    echo '[!] Claude Code 安装失败，请手动运行：'\n");
-        s.append("    echo '    npm install -g @anthropic-ai/claude-code'\n");
+        s.append("    echo '    npm install -g @anthropic-ai/claude-code --include=optional'\n");
         s.append("    return 1 2>/dev/null || exit 1\n");
         s.append("fi\n");
         s.append("echo '[*] Claude Code 安装成功'\n\n");

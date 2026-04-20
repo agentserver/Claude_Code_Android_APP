@@ -16,4 +16,9 @@
         android:icon="@android:drawable/ic_lock_lock"
         android:title="密钥" />
 
+    <item
+        android:id="@+id/nav_agentserver"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Agent" />
+
 </menu>
