@@ -150,7 +150,9 @@ public class AgentServerFragment extends Fragment {
         String agentArgs = "claudecode --server '" + safeUrl + "'" + resumeFlag + nameFlag + " --skip-open-browser";
 
         String script =
-            "pkill -f 'agentserver claudecode' 2>/dev/null; sleep 1\n" +
+            // pgrep 排除当前 bash 自身（$$），避免 pkill -f 因 cmdline 包含 'agentserver claudecode' 把自己杀掉（exit 143）
+            "for _p in $(pgrep -f 'agentserver claudecode' 2>/dev/null);" +
+            " do [ \"$_p\" != \"$$\" ] && kill \"$_p\" 2>/dev/null; done; sleep 1\n" +
             "> '" + logFile + "'\n" +          // 清空旧日志，避免历史内容干扰状态检测
             "echo '[*] 正在启动 AgentServer...'\n" +
             "nohup '" + pdBin + "' login --user " + PROOT_USER + " ubuntu -- agentserver " + agentArgs +
