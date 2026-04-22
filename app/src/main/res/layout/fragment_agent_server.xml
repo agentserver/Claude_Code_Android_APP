@@ -94,7 +94,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="注册码（沙盒号）"
+                android:text="沙盒 ID（可选）"
                 android:textColor="#212121"
                 android:textSize="13sp"
                 android:textStyle="bold"
@@ -104,7 +104,7 @@
                 android:id="@+id/agentserver_code"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="从 Web UI「沙盒」页面点击 💻 图标生成"
+                android:hint="留空自动复用上次沙盒，或填入指定沙盒 ID"
                 android:textColor="#212121"
                 android:textColorHint="#AAAAAA"
                 android:background="#EEEEEE"
@@ -244,24 +244,32 @@
 
         </LinearLayout>
 
-        <ScrollView
-            android:id="@+id/agentserver_log_scroll"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:fillViewport="true">
 
-            <TextView
-                android:id="@+id/agentserver_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="#333333"
-                android:textSize="12sp"
-                android:fontFamily="monospace"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="8dp" />
+            <ScrollView
+                android:id="@+id/agentserver_log_scroll"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:fillViewport="true">
 
-        </ScrollView>
+                <TextView
+                    android:id="@+id/agentserver_log"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#333333"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp" />
+
+            </ScrollView>
+
+        </HorizontalScrollView>
 
     </LinearLayout>
 

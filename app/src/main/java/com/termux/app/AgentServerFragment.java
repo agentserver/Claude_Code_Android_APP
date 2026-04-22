@@ -20,6 +20,7 @@ import com.termux.R;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.function.Consumer;
 
 /**
  * AgentServer 配置与管理页面。
@@ -32,6 +33,7 @@ public class AgentServerFragment extends Fragment {
     private static final String KEY_SERVER_URL    = "server_url";
     private static final String KEY_SANDBOX_CODE  = "sandbox_code";
     private static final String KEY_DEVICE_NAME   = "device_name";
+    private static final String KEY_SANDBOX_ID    = "sandbox_id";  // 上次成功连接的沙盒 ID
 
     private TextView  mStatusText;
     private TextView  mInfoText;
@@ -42,6 +44,9 @@ public class AgentServerFragment extends Fragment {
     private ScrollView mLogScroll;
 
     private Thread mActiveThread;
+    private String mLastSandboxId = "";  // 上次成功连接的沙盒 ID，用于 --resume
+    private boolean mConnected = false;       // 本次 connect 是否成功建立 tunnel
+    private boolean mRetryWithoutResume = false; // 401 后重试（不带 --resume）
 
     // ─────────────────────────────────────────────────────────────────────────
     // Fragment 生命周期
@@ -74,7 +79,6 @@ public class AgentServerFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        checkStatus();   // 每次进入页面自动刷新状态
     }
 
     @Override
@@ -101,7 +105,6 @@ public class AgentServerFragment extends Fragment {
             "fi\n" +
             "echo \"版本: $(proot-distro login ubuntu -- agentserver version 2>/dev/null)\"\n" +
             "echo ''\n" +
-            // 检查 Termux 层的 proot agentserver 进程（不在 proot 内部 grep）
             "if pgrep -f 'agentserver' >/dev/null 2>&1; then\n" +
             "  echo '[*] Agent 运行中'\n" +
             "  pgrep -a -f 'agentserver' 2>/dev/null | grep -v grep | head -5\n" +
@@ -112,15 +115,16 @@ public class AgentServerFragment extends Fragment {
             "echo '=== 最近日志（最后 30 行）==='\n" +
             "tail -30 '" + logFile + "' 2>/dev/null || echo '（无日志文件）'\n";
 
-        runScript(script, "刷新状态");
+        runScript(script, "刷新状态", null);
     }
 
     /**
      * 在 Termux 层 nohup 整个 proot-distro 进程，使 agentserver 后台持续运行。
-     * v0.40.0 使用 claudecode（OAuth），首次运行日志里会出现认证 URL。
-     * 注：不在 doConnect 里 pkill 已有进程（避免 pkill 的模式字符串匹配到自身 bash 脚本导致 exit 143）。
+     * 连接成功后从日志解析 sandbox ID 并持久化，下次用 --resume 复用同一沙盒。
      */
     private void doConnect() {
+        mConnected = false;
+        mRetryWithoutResume = false;
         String url    = mUrlEdit.getText().toString().trim();
         String code   = mCodeEdit != null ? mCodeEdit.getText().toString().trim() : "";
         String device = mDeviceNameEdit.getText().toString().trim();
@@ -138,35 +142,72 @@ public class AgentServerFragment extends Fragment {
         String safeUrl  = url.replace("'", "'\\''");
         String nameFlag = device.isEmpty() ? "" : " --name '" + device.replace("'", "'\\''") + "'";
 
-        // v0.40.0 只有 claudecode（OAuth）；如未来 connect 子命令可用时可在此扩展
-        String agentArgs = "claudecode --server '" + safeUrl + "'" + nameFlag + " --skip-open-browser";
+        // 优先级：用户手填沙盒 ID > 上次自动保存的 ID > 不传（首次新建）
+        String resumeId = !code.isEmpty() ? code : mLastSandboxId;
+        String resumeFlag = resumeId.isEmpty() ? "" : " --resume '" + resumeId.replace("'", "'\\''") + "'";
+
+        String agentArgs = "claudecode --server '" + safeUrl + "'" + resumeFlag + nameFlag + " --skip-open-browser";
 
         String script =
-            "echo '[*] 正在启动 AgentServer（如首次使用需 OAuth 授权）...'\n" +
-            // 在 Termux 层 nohup proot-distro，避免 proot shell 退出时杀死 agentserver
+            "pkill -f 'agentserver claudecode' 2>/dev/null; sleep 1\n" +
+            "> '" + logFile + "'\n" +          // 清空旧日志，避免历史内容干扰状态检测
+            "echo '[*] 正在启动 AgentServer...'\n" +
             "nohup '" + pdBin + "' login ubuntu -- agentserver " + agentArgs +
             " >> '" + logFile + "' 2>&1 &\n" +
             "AS_PID=$!\n" +
-            "sleep 3\n" +
+            "echo '[*] 等待启动（5 秒）...'\n" +
+            "sleep 5\n" +
+            "echo ''\n" +
+            "echo '=== 当前日志 ==='\n" +
+            "cat '" + logFile + "' 2>/dev/null || echo '（无日志）'\n" +
+            "echo ''\n" +
             "if kill -0 $AS_PID 2>/dev/null; then\n" +
-            "  echo \"[*] Agent 已启动，PID: $AS_PID\"\n" +
-            "  echo ''\n" +
-            "  echo '=== 日志（如有 OAuth URL 请复制到浏览器）==='\n" +
-            "  tail -30 '" + logFile + "' 2>/dev/null\n" +
+            "  echo \"[*] Agent 进程运行中（PID: $AS_PID）\"\n" +
             "else\n" +
-            "  echo '[!] Agent 启动失败，日志:'\n" +
-            "  cat '" + logFile + "' 2>/dev/null || echo '（无日志）'\n" +
+            "  echo '[!] Agent 进程已退出'\n" +
             "fi\n";
 
-        runScript(script, "连接 AgentServer");
+        // 监听输出：提取沙盒 ID；遇到 session not found 时自动清除旧 ID 避免下次继续失败
+        runScript(script, "连接 AgentServer", line -> {
+            if (line.contains("Failed to load session") || line.contains("session not found")
+                    || line.contains("got 401") || line.contains("status code 101 but got")) {
+                mLastSandboxId = "";
+                saveSandboxId("");
+                mRetryWithoutResume = true;
+                post(() -> {
+                    setStatus("● 重试中", "#F57C00");
+                    setInfo("沙盒 token 已过期，即将重新创建连接...");
+                });
+                return;
+            }
+            int idx = line.indexOf("tunnel connected (sandbox:");
+            if (idx < 0) return;
+            int start = line.indexOf(':', idx + "tunnel connected ".length()) + 1;
+            int end   = line.lastIndexOf(')');
+            if (start > 0 && end > start) {
+                String sandboxId = line.substring(start, end).trim();
+                if (!sandboxId.isEmpty()) {
+                    mLastSandboxId = sandboxId;
+                    saveSandboxId(sandboxId);
+                    mConnected = true;
+                    // 立即更新状态，不等 25 秒 tail 超时
+                    final String sid = sandboxId;
+                    post(() -> {
+                        setStatus("● 已连接", "#388E3C");
+                        setInfo("AgentServer 已连接到服务器（沙盒: " + sid.substring(0, 8) + "...）");
+                    });
+                }
+            }
+        });
     }
 
     /** 停止后台运行的 Agent（在 Termux 层 kill，不进入 proot）。 */
     private void doStop() {
+        mConnected = false;
         runScript(
             "pkill -f 'proot-distro.*login ubuntu' 2>/dev/null && echo '[*] Agent 已断开连接'" +
             " || echo '[!] 未找到运行中的 Agent 进程'",
-            "断开连接"
+            "断开连接", null
         );
     }
 
@@ -174,25 +215,17 @@ public class AgentServerFragment extends Fragment {
     // 命令执行
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void runUbuntuCmd(String ubuntuCmd, String label) {
-        // 在 Ubuntu proot 内执行单条命令，stderr 合并到 stdout
-        String safe = ubuntuCmd.replace("'", "'\\''");
-        runScript("proot-distro login ubuntu -- sh -c '" + safe + "' 2>&1", label);
-    }
-
-    private void runScript(String bashScript, String label) {
+    private void runScript(String bashScript, String label, @Nullable Consumer<String> lineCallback) {
         cancelActiveThread();
         clearLog();
         appendLog("▶ " + label + "\n");
         setStatus("● 运行中", "#F57C00");
         setInfo("正在执行...");
 
-        // Termux 的 bash 路径：$PREFIX/bin/bash，不能直接用 "bash"（Android 没有系统 bash）
         String prefix = System.getenv("PREFIX");
         if (prefix == null || prefix.isEmpty()) prefix = "/data/data/com.termux/files/usr";
         String bash = prefix + "/bin/bash";
 
-        // 构建包含 Termux bin 路径的 PATH（System.getenv 里可能没有 $PREFIX/bin）
         String sysPath = System.getenv("PATH");
         if (sysPath == null) sysPath = "";
         String termuxPath = prefix + "/bin:" + prefix + "/bin/applets:" + sysPath;
@@ -207,17 +240,18 @@ public class AgentServerFragment extends Fragment {
                 env.putAll(System.getenv());
                 env.put("PATH",   finalPath);
                 env.put("PREFIX", finalPrefix);
-                env.put("HOME",   finalPrefix + "/../home"); // Termux $HOME
+                env.put("HOME",   finalPrefix + "/../home");
                 Process p = pb.start();
 
                 BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream()));
+                    new InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
                 String line;
                 while ((line = br.readLine()) != null) {
                     if (Thread.currentThread().isInterrupted()) {
                         p.destroy();
                         return;
                     }
+                    if (lineCallback != null) lineCallback.accept(line);
                     final String l = line;
                     post(() -> appendLog(l + "\n"));
                 }
@@ -241,11 +275,10 @@ public class AgentServerFragment extends Fragment {
         mActiveThread.start();
     }
 
-    /** 根据退出码和日志内容推断状态，更新状态徽章和摘要文本。 */
+    /** 根据退出码和 mConnected 标志更新状态徽章和摘要文本。 */
     private void updateStatusFromLog(int exitCode) {
-        String log = mLogText.getText().toString().toLowerCase();
-
         if (exitCode != 0) {
+            String log = mLogText.getText().toString();
             if (log.contains("未安装") || log.contains("not installed") || log.contains("not found")) {
                 setStatus("● 未安装", "#888888");
                 setInfo("AgentServer 未安装，请重启应用等待自动安装");
@@ -259,21 +292,19 @@ public class AgentServerFragment extends Fragment {
             return;
         }
 
-        if (log.contains("connected") || log.contains("已连接")) {
+        if (mConnected) {
             setStatus("● 已连接", "#388E3C");
-            setInfo("AgentServer 已连接到服务器");
-        } else if (log.contains("running") || log.contains("运行中")) {
-            setStatus("● 运行中", "#1976D2");
-            setInfo("AgentServer 服务运行中");
-        } else if (log.contains("stopped") || log.contains("已停止")) {
-            setStatus("● 已停止", "#F57C00");
-            setInfo("AgentServer 服务已停止");
-        } else if (log.contains("disconnected") || log.contains("已断开")) {
-            setStatus("● 已断开", "#888888");
-            setInfo("AgentServer 已断开连接");
+            setInfo("AgentServer 已连接到服务器" +
+                (mLastSandboxId.isEmpty() ? "" : "（沙盒: " + mLastSandboxId.substring(0, 8) + "...）"));
+        } else if (mRetryWithoutResume) {
+            mRetryWithoutResume = false;
+            setStatus("● 重试中", "#F57C00");
+            setInfo("沙盒 token 已过期，正在重新创建连接...");
+            appendLog("\n[*] 沙盒 token 过期（401），自动重新创建沙盒连接...\n");
+            post(this::doConnect);
         } else {
             setStatus("● 已安装", "#555555");
-            setInfo("AgentServer 已安装");
+            setInfo("Agent 进程已启动，但未检测到 tunnel 连接");
         }
     }
 
@@ -305,6 +336,7 @@ public class AgentServerFragment extends Fragment {
         mUrlEdit.setText(p.getString(KEY_SERVER_URL, ""));
         mCodeEdit.setText(p.getString(KEY_SANDBOX_CODE, ""));
         mDeviceNameEdit.setText(p.getString(KEY_DEVICE_NAME, ""));
+        mLastSandboxId = p.getString(KEY_SANDBOX_ID, "");
     }
 
     private void savePrefs() {
@@ -313,6 +345,13 @@ public class AgentServerFragment extends Fragment {
             .putString(KEY_SERVER_URL, mUrlEdit.getText().toString().trim())
             .putString(KEY_SANDBOX_CODE, mCodeEdit.getText().toString().trim())
             .putString(KEY_DEVICE_NAME, mDeviceNameEdit.getText().toString().trim())
+            .apply();
+    }
+
+    private void saveSandboxId(String sandboxId) {
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SANDBOX_ID, sandboxId)
             .apply();
     }
 

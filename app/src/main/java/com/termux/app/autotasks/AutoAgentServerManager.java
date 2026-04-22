@@ -11,6 +11,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 
 /**
  * Phase 3b: 自动在 Ubuntu 内安装 AgentServer（离线 tar.gz 包）。
@@ -37,6 +38,7 @@ public class AutoAgentServerManager {
 
     private final TermuxActivity mActivity;
     private volatile boolean mExtractionDone = false;
+    private volatile boolean mWasUpdated = false;
 
     public AutoAgentServerManager(@NonNull TermuxActivity activity) {
         mActivity = activity;
@@ -71,17 +73,26 @@ public class AutoAgentServerManager {
     // -------------------------------------------------------------------------
 
     private void prepare() {
+        File dest = new File(mActivity.getFilesDir(), ASSET_TGZ_REL);
+        boolean prevExisted = dest.exists() && dest.length() > 0;
         boolean ok = extractAsset();
         writeInnerScript(ok);
         mExtractionDone = true;
+        if (ok && mWasUpdated && prevExisted) {
+            updateInstalledBinaryAsync();
+        }
     }
 
-    /** 将 assets/agentserver-linux-arm64.tar.gz 复制到 filesDir，返回是否成功。 */
+    /** 将 assets/agentserver-linux-arm64.tgz 复制到 filesDir，返回是否成功。
+     *  若 asset 大小与磁盘上的文件不一致（APK 更新带入新版），强制重新提取并置 mWasUpdated。 */
     private boolean extractAsset() {
         File dest = new File(mActivity.getFilesDir(), ASSET_TGZ_REL);
-        // 同时检查文件大小：进程被 OOM Kill 时可能留下 0 字节的残留文件
-        if (dest.exists() && dest.length() > 0) return true;
-        if (dest.exists()) dest.delete();  // 清除损坏的残留文件
+        long assetSize = getAssetSize();
+        // 大小一致：无需更新
+        if (dest.exists() && dest.length() > 0 && dest.length() == assetSize) return true;
+        // 大小不一致或文件损坏：强制重新提取
+        if (dest.exists()) dest.delete();
+        mWasUpdated = true;
         dest.getParentFile().mkdirs();
         AssetManager am = mActivity.getAssets();
         File tmp = new File(dest.getParent(), ASSET_TGZ_NAME + ".tmp");
@@ -101,6 +112,57 @@ public class AutoAgentServerManager {
             return false;
         }
         return dest.exists() && dest.length() > 0;
+    }
+
+    /** 读取 asset 文件的字节数，用于与磁盘文件比对版本。 */
+    private long getAssetSize() {
+        try (InputStream in = mActivity.getAssets().open(ASSET_TGZ_NAME)) {
+            long size = 0;
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) != -1) size += n;
+            return size;
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    /** APK 更新后在后台直接替换 Ubuntu proot 内已安装的 binary，无需重启终端。 */
+    private void updateInstalledBinaryAsync() {
+        new Thread(() -> {
+            String prefix = System.getenv("PREFIX");
+            if (prefix == null || prefix.isEmpty())
+                prefix = "/data/data/com.termux/files/usr";
+            String tgzPath = new File(mActivity.getFilesDir(), ASSET_TGZ_REL).getAbsolutePath();
+            String bash = prefix + "/bin/bash";
+            String termuxHome = prefix + "/../home";
+            final String finalPrefix = prefix;
+
+            String script =
+                "command -v proot-distro >/dev/null 2>&1 || exit 0\n" +
+                "proot-distro login ubuntu -- sh << 'INNER'\n" +
+                "  _t=$(mktemp -d)\n" +
+                "  cp '" + tgzPath + "' \"$_t/pkg.tgz\" 2>/dev/null || { rm -rf \"$_t\"; exit 0; }\n" +
+                "  tar -xzf \"$_t/pkg.tgz\" -C \"$_t\" 2>/dev/null || { rm -rf \"$_t\"; exit 0; }\n" +
+                "  _b=$(find \"$_t\" -name agentserver -type f | head -1)\n" +
+                "  [ -n \"$_b\" ] || { rm -rf \"$_t\"; exit 0; }\n" +
+                "  cp \"$_b\" /usr/local/bin/agentserver && chmod +x /usr/local/bin/agentserver\n" +
+                "  rm -rf \"$_t\"\n" +
+                "  echo '[*] AgentServer updated'\n" +
+                "INNER\n";
+
+            try {
+                ProcessBuilder pb = new ProcessBuilder(bash, "-c", script);
+                pb.redirectErrorStream(true);
+                Map<String, String> env = pb.environment();
+                env.putAll(System.getenv());
+                env.put("PATH", finalPrefix + "/bin:" + finalPrefix + "/bin/applets:"
+                        + env.getOrDefault("PATH", ""));
+                env.put("PREFIX", finalPrefix);
+                env.put("HOME", termuxHome);
+                pb.start().waitFor();
+            } catch (Exception ignored) {}
+        }, "agentserver-update").start();
     }
 
     /** 写入 Ubuntu 内运行的安装脚本。extractionOk 为 false 时脚本会提示本地包不可用。 */
@@ -123,8 +185,8 @@ public class AutoAgentServerManager {
         s.append("#!/bin/bash\n");
         s.append("# AgentServer auto-setup (sourced from ~/.bashrc after Claude setup)\n\n");
 
-        // ── 幂等保护 ─────────────────────────────────────────────────────────
-        s.append("if command -v agentserver >/dev/null 2>&1; then\n");
+        // ── 幂等保护：已安装且 /tmp 没有新包时跳过 ───────────────────────────
+        s.append("if command -v agentserver >/dev/null 2>&1 && [ ! -f /tmp/agentserver-linux-arm64.tar.gz ]; then\n");
         s.append("    sed -i '/.agentserver-setup/d' ~/.bashrc 2>/dev/null\n");
         s.append("    rm -f ~/.agentserver-setup.sh\n");
         s.append("    return 0 2>/dev/null || exit 0\n");
