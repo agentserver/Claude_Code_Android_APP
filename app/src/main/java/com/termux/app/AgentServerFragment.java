@@ -135,6 +135,23 @@ public class AgentServerFragment extends Fragment {
         }
         savePrefs();
 
+        // 从 ApiKeyStore 读取激活的 API Key，直接注入 agentserver 进程环境
+        // （proot-distro 不走 login shell，.bashrc 不会自动 source，必须显式传入）
+        ApiKeyStore keyStore = new ApiKeyStore(requireContext());
+        String activeId = keyStore.getActiveId();
+        String apiKey = "", apiBaseUrl = "";
+        if (activeId != null) {
+            for (ApiKeyStore.Entry e : keyStore.loadAll()) {
+                if (e.id.equals(activeId)) { apiKey = e.value; apiBaseUrl = e.baseUrl; break; }
+            }
+        }
+        String envPrefix = "";
+        if (!apiKey.isEmpty()) {
+            envPrefix = "ANTHROPIC_API_KEY='" + apiKey.replace("'", "'\\''") + "' ";
+            if (!apiBaseUrl.isEmpty())
+                envPrefix += "ANTHROPIC_BASE_URL='" + apiBaseUrl.replace("'", "'\\''") + "' ";
+        }
+
         String prefix   = System.getenv("PREFIX");
         if (prefix == null || prefix.isEmpty()) prefix = "/data/data/com.termux/files/usr";
         String home     = prefix + "/../home";
@@ -148,6 +165,7 @@ public class AgentServerFragment extends Fragment {
         String resumeFlag = resumeId.isEmpty() ? "" : " --resume '" + resumeId.replace("'", "'\\''") + "'";
 
         String agentArgs = "claudecode --server '" + safeUrl + "'" + resumeFlag + nameFlag + " --skip-open-browser";
+        final String finalEnvPrefix = envPrefix;
 
         String script =
             // pgrep 排除当前 bash 自身（$$），避免 pkill -f 因 cmdline 包含 'agentserver claudecode' 把自己杀掉（exit 143）
@@ -155,10 +173,9 @@ public class AgentServerFragment extends Fragment {
             " do [ \"$_p\" != \"$$\" ] && kill \"$_p\" 2>/dev/null; done; sleep 1\n" +
             "> '" + logFile + "'\n" +          // 清空旧日志，避免历史内容干扰状态检测
             "echo '[*] 正在启动 AgentServer...'\n" +
-            // bash -c 包裹：source .bashrc 使 ANTHROPIC_API_KEY 等环境变量生效
-            // proot-distro 直接执行命令不走 login shell，env var 不会自动注入
+            // bash -c 包裹：显式传入 ANTHROPIC_API_KEY（来自 ApiKeyStore）+ 兜底 source .bashrc
             "nohup '" + pdBin + "' login --user " + PROOT_USER + " ubuntu -- bash -c" +
-            " \". /home/claude/.profile 2>/dev/null; . /home/claude/.bashrc 2>/dev/null; exec agentserver " + agentArgs + "\"" +
+            " \". /home/claude/.bashrc 2>/dev/null; " + finalEnvPrefix + "exec agentserver " + agentArgs + "\"" +
             " >> '" + logFile + "' 2>&1 &\n" +
             "AS_PID=$!\n" +
             "echo '[*] 等待启动（5 秒）...'\n" +
