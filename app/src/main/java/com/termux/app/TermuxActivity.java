@@ -954,7 +954,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return true;
             } else if (id == R.id.nav_terminal) {
                 showTerminalMode();
-                showChatLogInTerminal(); // 自动在终端显示对话历史
                 return true;
             } else if (id == R.id.nav_apikey) {
                 showApiKeyMode();
@@ -1081,63 +1080,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             toolbar.setVisibility(View.VISIBLE);
         }
     }
-
-    /**
-     * 切换到终端 Tab 时，把尚未注入的对话条目直接写入 TerminalEmulator 显示缓冲区。
-     * emulator.append() 始终在主线程（Handler.handleMessage）调用，此处同样在主线程，无竞态。
-     * 终端 View 已可见时注入，onTextChanged → onScreenUpdated 立即触发重绘。
-     */
-    private void showChatLogInTerminal() {
-        TerminalSession session = getCurrentSession();
-        if (session == null || session.getEmulator() == null) return;
-
-        String logPath = com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH
-                + "/chat_history.log";
-        java.io.File logFile = new java.io.File(logPath);
-        if (!logFile.exists()) return;
-
-        try {
-            String content = new String(java.nio.file.Files.readAllBytes(logFile.toPath()),
-                    java.nio.charset.StandardCharsets.UTF_8);
-            java.util.List<String[]> entries = new java.util.ArrayList<>();
-            for (String block : content.split("\n\n")) {
-                String trimmed = block.trim();
-                if (trimmed.isEmpty()) continue;
-                int nl = trimmed.indexOf('\n');
-                if (nl < 0) continue;
-                String header = trimmed.substring(0, nl).trim();
-                String body   = trimmed.substring(nl + 1).trim();
-                if (!body.isEmpty()) entries.add(new String[]{header, body});
-            }
-
-            // 只注入上次之后新增的条目
-            if (mTerminalInjectedCount >= entries.size()) return;
-
-            StringBuilder sb = new StringBuilder();
-            if (mTerminalInjectedCount == 0) {
-                sb.append("\r\n\033[1;37m──── Chat History ────\033[0m\r\n");
-            }
-            for (int i = mTerminalInjectedCount; i < entries.size(); i++) {
-                String header = entries.get(i)[0]; // e.g. "[14:32:01] 你"
-                String body   = entries.get(i)[1];
-                // 判断角色，着色
-                boolean isUser = header.contains("] 你");
-                String color   = isUser ? "\033[1;34m" : "\033[1;32m";
-                sb.append(color).append(header).append("\033[0m\r\n");
-                // 多行内容：每个 \n 替换为 \r\n
-                sb.append(body.replace("\n", "\r\n")).append("\r\n\r\n");
-                mTerminalInjectedCount++;
-            }
-
-            byte[] bytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            session.getEmulator().append(bytes, bytes.length);
-            if (mTermuxTerminalSessionActivityClient != null)
-                mTermuxTerminalSessionActivityClient.onTextChanged(session);
-        } catch (Exception ignored) {}
-    }
-
-    /** 已注入终端的对话条目数，避免重复显示。 */
-    private int mTerminalInjectedCount = 0;
 
     /**
      * 切换回主页 Tab 时，解析日志文件并把尚未显示的条目通过 HomeFragment.syncFromLog() 补充进去。
