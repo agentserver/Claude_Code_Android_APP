@@ -445,7 +445,10 @@ public class AutoUbuntuManager {
           .append("{ grep -qF '.agentserver-setup' \"$_ubr/root/.bashrc\" 2>/dev/null || ")
           .append("printf '\\n[ -f ~/.agentserver-setup.sh ] && . ~/.agentserver-setup.sh\\n' ")
           .append(">> \"$_ubr/root/.bashrc\"; }; ")
-          // 建 capabilities.json 软链接：Ubuntu 内 ~/capabilities.json -> Termux home 的文件
+          // root/.bashrc 末尾注入 exec su - claude（幂等），使终端自动切换为 claude 用户
+          .append("{ grep -qF 'exec su - claude' \"$_ubr/root/.bashrc\" 2>/dev/null || ")
+          .append("printf '\\nexec su - claude\\n' >> \"$_ubr/root/.bashrc\"; }; ")
+          // 建 capabilities.json 软链接（放 /root/ 供 setup 阶段用，/home/claude/ 供运行时用）
           .append("ln -sf \"").append(capabilitiesPath).append("\" ")
           .append("\"$_ubr/root/capabilities.json\" 2>/dev/null; ")
           // 建 termux-* wrapper 脚本（HTTP 桥接版）
@@ -470,8 +473,20 @@ public class AutoUbuntuManager {
           .append("chmod +x \"$_ubr/usr/local/bin/termux-clipboard-get\" 2>/dev/null; ")
           .append("echo \"[*] Claude + AgentServer setup + capabilities ready.\"; fi; fi; ");
 
+        // ── Step 2.95: 在 Ubuntu 内创建 claude 用户（非交互），并建 capabilities 软链接 ──
+        final String capPath = capabilitiesPath;
+        sb.append("if [ \"$auto_ok\" = \"1\" ]; then ")
+          .append("proot-distro login ubuntu -- sh -c ")
+          .append("'id claude >/dev/null 2>&1 || useradd -m -s /bin/bash claude' 2>/dev/null || true; ")
+          // capabilities.json 软链接到 claude 用户 home（运行时需要）
+          .append("_ubr2=\"$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu\"; ")
+          .append("mkdir -p \"$_ubr2/home/claude\" 2>/dev/null; ")
+          .append("ln -sf \"").append(capPath).append("\" \"$_ubr2/home/claude/capabilities.json\" 2>/dev/null; ")
+          .append("fi; ");
+
         // ── Step 3: 登录 Ubuntu ───────────────────────────────────────────────
         // 登录策略：依次尝试四种组合，直到成功（用 || 链：前一个非零退出才执行下一个）。
+        // root/.bashrc 末尾已注入 exec su - claude，终端会自动切换到 claude 用户。
         // signal 11 根因：Ubuntu 25.10 的 glibc/bash 在启动时调用了 proot 未完全拦截的 syscall。
         //   - --kernel 5.4.0：让 glibc 认为内核较旧，退回不依赖新 syscall 的代码路径
         //   - -- /bin/sh：用比 bash 更简单的 shell，减少对 syscall 的依赖

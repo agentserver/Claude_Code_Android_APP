@@ -188,17 +188,21 @@ public class AutoClaudeManager {
         s.append("            *) _base='https://code.ai.cs.ac.cn' ;;\n");
         s.append("        esac\n\n");
 
-        // 写 .bashrc（幂等）
-        s.append("        grep -qF 'ANTHROPIC_API_KEY' ~/.bashrc 2>/dev/null || {\n");
-        s.append("            printf '\\n# Claude Code\\nexport ANTHROPIC_API_KEY=\"%s\"\\n' \"$_key\" >> ~/.bashrc\n");
-        s.append("            [ -n \"$_base\" ] && printf 'export ANTHROPIC_BASE_URL=\"%s\"\\n' \"$_base\" >> ~/.bashrc\n");
+        // 写配置到 claude 用户 home（终端以 claude 用户身份运行）
+        s.append("        _chome=/home/claude\n");
+        s.append("        mkdir -p \"$_chome\" 2>/dev/null\n");
+        // 写 /home/claude/.bashrc（幂等）
+        s.append("        grep -qF 'ANTHROPIC_API_KEY' \"$_chome/.bashrc\" 2>/dev/null || {\n");
+        s.append("            printf '\\n# Claude Code\\nexport ANTHROPIC_API_KEY=\"%s\"\\n' \"$_key\" >> \"$_chome/.bashrc\"\n");
+        s.append("            [ -n \"$_base\" ] && printf 'export ANTHROPIC_BASE_URL=\"%s\"\\n' \"$_base\" >> \"$_chome/.bashrc\"\n");
         s.append("        }\n");
         s.append("        export ANTHROPIC_API_KEY=\"$_key\"\n");
         s.append("        [ -n \"$_base\" ] && export ANTHROPIC_BASE_URL=\"$_base\"\n\n");
 
-        // 写 ~/.claude.json 跳过 onboarding
-        s.append("        printf '{\\n  \"hasCompletedOnboarding\": true\\n}\\n' > ~/.claude.json\n");
-        s.append("        echo '[*] 配置已写入 ~/.bashrc'\n");
+        // 写 /home/claude/.claude.json 跳过 onboarding
+        s.append("        printf '{\\n  \"hasCompletedOnboarding\": true\\n}\\n' > \"$_chome/.claude.json\"\n");
+        s.append("        chown claude:claude \"$_chome/.bashrc\" \"$_chome/.claude.json\" 2>/dev/null\n");
+        s.append("        echo '[*] 配置已写入 /home/claude/.bashrc'\n");
         s.append("    fi\n");
         s.append("fi\n\n");
 
