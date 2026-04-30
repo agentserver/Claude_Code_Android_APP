@@ -1,7 +1,7 @@
 # Android MCP 机甲驾驶 — 实施路线图
 
 > 参考设计：`android_mcp_claude_mecha_design.md`
-> 最后更新：2026-04-30
+> 最后更新：2026-04-30（proot 验证结论已更新）
 
 ---
 
@@ -21,37 +21,27 @@
 
 ---
 
-## 待解决的前置问题
+## 已验证的前置问题
 
-### P0：验证 Claude Code 是否可在 Termux 原生（无 proot）运行
+### ~~P0：验证 Claude Code 是否可在 Termux 原生（无 proot）运行~~ — 已验证，结论确定
 
-**背景：**
-proot 的唯一存在理由是 Claude Code 依赖 glibc，而 Termux 提供的是 Android bionic libc。
-如果 Claude Code 能直接在 Termux 的 Node.js 环境下运行，proot 层可以完全去掉。
-
-**好处（去掉 proot）：**
-- MCP 工具返回的文件路径与 Claude Code 所在文件系统完全一致，无跨边界问题
-- 启动链路更短（去掉 proot-distro login 的 1~3 秒）
-- 进程管理更简单
-- 整体架构层数减少
-
-**验证方法（直接在手机 Termux 里跑）：**
+**验证过程（2026-04-30 实测）：**
 ```bash
-pkg install nodejs
-npm install -g @anthropic-ai/claude-code
-claude --version
-# 如果 node-pty 等 native 模块编译/运行失败 → 必须保留 proot
-# 如果成功 → 可以去掉 proot
+pkg install nodejs          # ✅ nodejs 25.8.2 + npm 11.12.1 安装成功
+npm install -g @anthropic-ai/claude-code  # ✅ 包安装成功
+claude --version            # ❌ Error: claude native binary not installed.
+node install.cjs            # ❌ Unsupported platform: android arm64
+                            #    Supported: linux-arm64, linux-arm64-musl ...（无 android）
 ```
 
-**备选：从源码编译测试**
-Claude Code 源码：https://github.com/anthropics/claude-code
-关键 native 依赖：node-pty（终端模拟）、可能的 crypto 模块
-Termux 有 node-pty 的 bionic 编译版本，可能可以替换
+**结论：proot + Ubuntu 必须保留。**
 
-**结论影响架构选择：**
-- 能去掉 proot → MCP 文件路径方案用本地路径
-- 不能去掉 proot → MCP 工具统一返回 base64 数据，或写到 Termux HOME
+原因：Claude Code 的原生二进制明确将 `android` 平台排除在支持列表之外（`process.platform` 在 Termux Node.js 下返回 `android` 而非 `linux`）。即使强制下载 `linux-arm64` 二进制，其动态链接 glibc 的特性也会导致在 Termux bionic 环境下崩溃。这是 Anthropic 的刻意设计，无法绕过。
+
+**架构影响：**
+- proot + Ubuntu 层保留，不做精简
+- MCP 工具产生的文件必须写到 Termux HOME（`/data/data/com.termux/files/home/`），该路径在 proot 内可见（`/root/` 或 `/home/claude/`）
+- 或 MCP 工具直接返回 base64 数据，完全绕过跨层文件路径问题
 
 ---
 
