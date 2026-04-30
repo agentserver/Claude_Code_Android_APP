@@ -206,7 +206,12 @@ public class AutoClaudeManager {
         s.append("    fi\n");
         s.append("fi\n\n");
 
-        // ── Step 6: 自我清除 ──────────────────────────────────────────────────
+        // ── Step 6: 注册 Android MCP Server ─────────────────────────────────
+        s.append("echo '[*] 注册 Android MCP Server...'\n");
+        s.append("su -l claude -c \"claude mcp add --transport http android-mcp http://127.0.0.1:8765/mcp\" 2>&1 || true\n");
+        s.append("echo '[*] MCP 注册完成（可用 claude mcp list 验证）'\n\n");
+
+        // ── Step 7: 自我清除 ──────────────────────────────────────────────────
         s.append("sed -i '/.claude-setup/d' ~/.bashrc 2>/dev/null\n");
         s.append("rm -f ~/.claude-setup.sh\n\n");
 
