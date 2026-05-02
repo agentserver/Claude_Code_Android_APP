@@ -26,8 +26,11 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import android.media.projection.MediaProjectionManager;
+
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.mcp.ScreenCaptureService;
 import com.termux.app.autotasks.AutoTaskCoordinator;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -180,6 +183,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private AutoTaskCoordinator mAutoTaskCoordinator;
 
+
+    private static final int REQUEST_CODE_SCREEN_CAPTURE  = 1001;
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
@@ -821,7 +826,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
+        } else if (requestCode == REQUEST_CODE_SCREEN_CAPTURE) {
+            if (resultCode == RESULT_OK && data != null) {
+                ScreenCaptureService.startWithPermission(this, resultCode, data);
+            } else {
+                Toast.makeText(this, "屏幕截图权限被拒绝", Toast.LENGTH_SHORT).show();
+            }
         }
+    }
+
+    /** 弹出系统 MediaProjection 授权对话框，结果回调到 onActivityResult。 */
+    public void requestScreenCapturePermission() {
+        MediaProjectionManager mpm =
+            (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_CAPTURE);
+    }
+
+    /** 停止当前屏幕截图服务（撤销授权）。 */
+    public void stopScreenCapture() {
+        ScreenCaptureService.stopCapture(this);
     }
 
     @Override

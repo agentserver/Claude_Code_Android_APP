@@ -8,6 +8,7 @@ import com.termux.app.mcp.McpHttpServer;
 import com.termux.app.mcp.tools.AndroidStatusTool;
 import com.termux.app.mcp.tools.CameraTool;
 import com.termux.app.mcp.tools.FileTool;
+import com.termux.app.mcp.tools.ScreenCaptureTool;
 
 public class AutoTaskCoordinator {
 
@@ -41,6 +42,7 @@ public class AutoTaskCoordinator {
         mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.CHECK_EXISTS));
         mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.LIST));
         mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.READ));
+        mMcpHttpServer.registerTool(new ScreenCaptureTool());
         mMcpHttpServer.start();
         // 后台生成 capabilities.json，供 Ubuntu 里的 Claude Code 读取设备能力快照
         new CapabilitiesManager(activity).generateAsync();

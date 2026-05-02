@@ -73,6 +73,7 @@ public class HomeFragment extends Fragment {
     private TextView mStatusText;
     private TextView mSessionTitle;
     private EditText mInputEdit;
+    private TextView mScreenCaptureStatus;
 
     // ── 历史会话抽屉 ──────────────────────────────────────────────────────
     private SessionStore               mSessionStore;
@@ -119,9 +120,10 @@ public class HomeFragment extends Fragment {
         mAdapter = new ChatAdapter(mMessages);
         mRecycler.setAdapter(mAdapter);
 
-        mStatusText   = view.findViewById(R.id.home_status_text);
-        mSessionTitle = view.findViewById(R.id.home_session_title);
-        mInputEdit    = view.findViewById(R.id.home_input_edit);
+        mStatusText          = view.findViewById(R.id.home_status_text);
+        mSessionTitle        = view.findViewById(R.id.home_session_title);
+        mInputEdit           = view.findViewById(R.id.home_input_edit);
+        mScreenCaptureStatus = view.findViewById(R.id.screen_capture_status);
 
         // ── 历史会话抽屉 ──────────────────────────────────────────────────
         mSessionStore   = new SessionStore(requireContext());
@@ -196,6 +198,19 @@ public class HomeFragment extends Fragment {
             mMessages.clear();
             mAdapter.notifyDataSetChanged();
             updateSessionTitle(null);
+        });
+
+        // 截图授权按钮：已授权时点击撤销，未授权时弹系统对话框
+        MaterialButton btnScreenCapture = view.findViewById(R.id.btn_screen_capture);
+        btnScreenCapture.setOnClickListener(v -> {
+            TermuxActivity a = act();
+            if (a == null) return;
+            if (com.termux.app.mcp.ScreenCaptureService.isRunning()) {
+                a.stopScreenCapture();
+                updateScreenCaptureStatus(false);
+            } else {
+                a.requestScreenCapturePermission();
+            }
         });
     }
 
@@ -521,6 +536,7 @@ public class HomeFragment extends Fragment {
                     updateStatus(active ? "● 会话活跃" : "● 就绪",
                                  active ? 0xFF2E7D32    : 0xFF888888);
                 }
+                updateScreenCaptureStatus(com.termux.app.mcp.ScreenCaptureService.isRunning());
                 mHandler.postDelayed(this, 2000);
             }
         };
@@ -570,6 +586,23 @@ public class HomeFragment extends Fragment {
         if (mStatusText != null) {
             mStatusText.setText(text);
             mStatusText.setTextColor(color);
+        }
+    }
+
+    private void updateScreenCaptureStatus(boolean granted) {
+        if (mScreenCaptureStatus == null) return;
+        if (granted) {
+            mScreenCaptureStatus.setText("● 截图: 已授权");
+            mScreenCaptureStatus.setTextColor(0xFF2E7D32);
+        } else {
+            mScreenCaptureStatus.setText("● 截图: 未授权");
+            mScreenCaptureStatus.setTextColor(0xFF888888);
+        }
+        // Update button label
+        View btn = getView();
+        if (btn != null) {
+            MaterialButton b = btn.findViewById(R.id.btn_screen_capture);
+            if (b != null) b.setText(granted ? "撤销截图" : "授权截图");
         }
     }
 
