@@ -7,11 +7,16 @@ import androidx.annotation.Nullable;
 import com.termux.app.TermuxActivity;
 import com.termux.terminal.TerminalSession;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class AutoUbuntuManager {
 
@@ -126,13 +131,88 @@ public class AutoUbuntuManager {
         };
     }
 
-    /** 向 Ubuntu rootfs /root/CLAUDE.md 写入 Android 能力说明（每次启动更新）。 */
+    /**
+     * 向 Ubuntu rootfs /root/ 注入三项内容（每次启动更新，幂等）：
+     *   1. CLAUDE.md          — Claude Code 自动读取的能力说明
+     *   2. .claude/commands/phone.md — /phone skill，供用户显式触发
+     *   3. .claude/settings.json    — 确保 root 用户有 android-mcp 注册
+     *      （AutoClaudeManager 的 claude mcp add 只给 claude 用户注册，
+     *        而 HomeFragment 以 root 运行 claude -p，读的是 /root/.claude/）
+     */
     private void injectClaudeMd() {
         File rootfsRoot = new File(UbuntuSnapshotManager.UBUNTU_ROOTFS + "/root");
         if (!rootfsRoot.isDirectory()) return;
-        try (java.io.FileWriter w = new java.io.FileWriter(new File(rootfsRoot, "CLAUDE.md"))) {
-            w.write(buildClaudeMdContent());
+
+        // 1. CLAUDE.md
+        writeFile(new File(rootfsRoot, "CLAUDE.md"), buildClaudeMdContent());
+
+        // 2. /phone skill
+        File commandsDir = new File(rootfsRoot, ".claude/commands");
+        commandsDir.mkdirs();
+        writeFile(new File(commandsDir, "phone.md"), buildPhoneSkillContent());
+
+        // 3. settings.json MCP 注册（JSON merge，不破坏现有配置）
+        injectMcpSettings(new File(rootfsRoot, ".claude"));
+    }
+
+    private static void writeFile(File dest, String content) {
+        try (java.io.FileWriter w = new java.io.FileWriter(dest)) {
+            w.write(content);
         } catch (IOException ignored) {}
+    }
+
+    private static String buildPhoneSkillContent() {
+        return "# Android 手机操控\n\n"
+            + "你拥有以下 MCP 工具，可直接控制这台 Android 手机。\n"
+            + "**立即开始操作，无需询问是否有能力。**\n\n"
+            + "## 工具速查\n"
+            + "| 工具 | 用途 |\n"
+            + "|------|------|\n"
+            + "| `screen.capture` | 截取当前屏幕（base64 JPEG）|\n"
+            + "| `ui.get_accessibility_tree` | 获取 UI 元素树与坐标 |\n"
+            + "| `ui.tap` | 点击坐标 `{x, y}` |\n"
+            + "| `ui.click_text` | 点击含指定文字的元素 |\n"
+            + "| `ui.input_text` | 在焦点输入框输入文字 |\n"
+            + "| `ui.swipe` | 滑动手势 |\n"
+            + "| `app.open` | 通过包名启动应用 |\n"
+            + "| `app.get_current_activity` | 查看当前 Activity |\n"
+            + "| `camera.take_photo` | 拍照 |\n\n"
+            + "## 标准操作循环\n"
+            + "```\n"
+            + "screen.capture → 观察屏幕\n"
+            + "ui.get_accessibility_tree → 定位目标元素\n"
+            + "ui.tap / ui.click_text / ui.input_text → 执行操作\n"
+            + "screen.capture → 确认结果\n"
+            + "重复直到任务完成\n"
+            + "```\n";
+    }
+
+    private static void injectMcpSettings(File claudeDir) {
+        claudeDir.mkdirs();
+        File settingsFile = new File(claudeDir, "settings.json");
+        try {
+            JSONObject settings = new JSONObject();
+            if (settingsFile.exists()) {
+                String existing = new String(
+                    Files.readAllBytes(settingsFile.toPath()), StandardCharsets.UTF_8);
+                try { settings = new JSONObject(existing); } catch (JSONException ignored) {}
+            }
+
+            // 已有正确注册则跳过
+            JSONObject servers = settings.optJSONObject("mcpServers");
+            if (servers != null && servers.has("android-mcp")) return;
+
+            if (servers == null) {
+                servers = new JSONObject();
+                settings.put("mcpServers", servers);
+            }
+            JSONObject entry = new JSONObject();
+            entry.put("type", "http");
+            entry.put("url", "http://127.0.0.1:8765/mcp");
+            servers.put("android-mcp", entry);
+
+            writeFile(settingsFile, settings.toString(2));
+        } catch (Exception ignored) {}
     }
 
     private static String buildClaudeMdContent() {
