@@ -126,6 +126,63 @@ public class AutoUbuntuManager {
         };
     }
 
+    /** 向 Ubuntu rootfs /root/CLAUDE.md 写入 Android 能力说明（每次启动更新）。 */
+    private void injectClaudeMd() {
+        File rootfsRoot = new File(UbuntuSnapshotManager.UBUNTU_ROOTFS + "/root");
+        if (!rootfsRoot.isDirectory()) return;
+        try (java.io.FileWriter w = new java.io.FileWriter(new File(rootfsRoot, "CLAUDE.md"))) {
+            w.write(buildClaudeMdContent());
+        } catch (IOException ignored) {}
+    }
+
+    private static String buildClaudeMdContent() {
+        return "# 运行环境\n\n"
+            + "你正在一台 Android 手机的 Ubuntu proot 容器中运行，"
+            + "拥有通过 MCP 工具直接控制宿主 Android 系统的能力。\n"
+            + "当用户要求操作手机、打开应用、截图、输入内容等任务时，"
+            + "**直接调用下列工具完成，无需询问是否有能力**。\n\n"
+
+            + "## MCP 工具（android-mcp，已自动注册）\n\n"
+
+            + "### UI 控制（需无障碍服务权限）\n"
+            + "- `ui.tap` — 点击屏幕坐标 `{x, y}`\n"
+            + "- `ui.swipe` — 滑动 `{x1,y1}→{x2,y2}`，可指定时长(ms)\n"
+            + "- `ui.click_text` — 点击屏幕上包含指定文字的元素\n"
+            + "- `ui.input_text` — 向当前焦点输入框输入文字\n"
+            + "- `ui.get_accessibility_tree` — 获取当前屏幕 UI 元素树（用于分析界面、定位元素）\n\n"
+
+            + "### 截图与摄像头\n"
+            + "- `screen.capture` — 截取当前屏幕，返回 base64 JPEG\n"
+            + "- `camera.take_photo` — 用后置摄像头拍照，返回 base64 JPEG\n\n"
+
+            + "### 文件操作\n"
+            + "- `file.read` — 读取文件内容\n"
+            + "- `file.list` — 列出目录内容\n"
+            + "- `file.check_exists` — 检查路径是否存在\n\n"
+
+            + "### App 管理\n"
+            + "- `app.open` — 通过包名启动应用（如 `com.android.chrome`）\n"
+            + "- `app.get_current_activity` — 获取当前前台 Activity 名称\n\n"
+
+            + "### 系统状态\n"
+            + "- `android.get_status` — 获取权限状态与工具可用性\n\n"
+
+            + "## Android 传感器数据（HTTP 直接调用）\n\n"
+            + "```bash\n"
+            + "curl http://127.0.0.1:" + ApiHttpBridgeServer.PORT + "/battery    # 电池状态\n"
+            + "curl http://127.0.0.1:" + ApiHttpBridgeServer.PORT + "/wifi       # WiFi 信息\n"
+            + "curl http://127.0.0.1:" + ApiHttpBridgeServer.PORT + "/sensors    # 传感器列表\n"
+            + "curl http://127.0.0.1:" + ApiHttpBridgeServer.PORT + "/camera     # 摄像头信息\n"
+            + "curl http://127.0.0.1:" + ApiHttpBridgeServer.PORT + "/clipboard  # 剪贴板内容\n"
+            + "```\n\n"
+
+            + "## 操作手机的推荐流程\n\n"
+            + "1. `screen.capture` 观察当前屏幕\n"
+            + "2. `ui.get_accessibility_tree` 分析 UI 结构，找到目标元素\n"
+            + "3. `ui.click_text` / `ui.tap` 点击，`ui.input_text` 输入\n"
+            + "4. 再次截图确认结果，循环直到任务完成\n";
+    }
+
     /** 向终端 stdin 写一条 echo 命令（shell 会立即执行并显示输出）。 */
     private static void writeEcho(TerminalSession session, String msg) {
         String safe = msg.replace("'", "'\\''");
@@ -134,6 +191,9 @@ public class AutoUbuntuManager {
 
     /** 等待 assets 准备完毕，然后向终端写入安装脚本命令。 */
     private void launchSetupScript(TerminalSession session) {
+        // 每次启动都写入/更新 CLAUDE.md，让 Claude Code 知道它的 Android 能力
+        injectClaudeMd();
+
         // 若后台提取仍在进行，最多等待 5 秒，超时则放弃本地包走网络
         if (!mExtractionDone) {
             long deadline = System.currentTimeMillis() + 5000;
