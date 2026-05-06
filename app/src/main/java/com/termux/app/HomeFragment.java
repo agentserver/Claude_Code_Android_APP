@@ -1,13 +1,20 @@
 package com.termux.app;
 
+import android.app.Activity;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.OpenableColumns;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -25,7 +32,10 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -70,11 +80,18 @@ public class HomeFragment extends Fragment {
     private ChatAdapter   mAdapter;
     private final List<ChatMessage> mMessages = new ArrayList<>();
 
-    private TextView mStatusText;
-    private TextView mSessionTitle;
-    private EditText mInputEdit;
-    private TextView mScreenCaptureStatus;
-    private TextView mAccessibilityStatus;
+    private TextView     mStatusText;
+    private TextView     mSessionTitle;
+    private EditText     mInputEdit;
+    private TextView     mScreenCaptureStatus;
+    private TextView     mAccessibilityStatus;
+    private LinearLayout mAttachmentPreviewRow;
+    private TextView     mAttachmentNameText;
+
+    // ── 文件附件 ───────────────────────────────────────────────────────────
+    private static final int REQUEST_CODE_PICK_FILE = 1002;
+    private String mAttachmentPath; // 已复制到 Termux home 的绝对路径
+    private String mAttachmentName; // 用于 UI 显示的文件名
 
     // ── 历史会话抽屉 ──────────────────────────────────────────────────────
     private SessionStore               mSessionStore;
@@ -121,11 +138,13 @@ public class HomeFragment extends Fragment {
         mAdapter = new ChatAdapter(mMessages);
         mRecycler.setAdapter(mAdapter);
 
-        mStatusText          = view.findViewById(R.id.home_status_text);
-        mSessionTitle        = view.findViewById(R.id.home_session_title);
-        mInputEdit           = view.findViewById(R.id.home_input_edit);
-        mScreenCaptureStatus = view.findViewById(R.id.screen_capture_status);
-        mAccessibilityStatus = view.findViewById(R.id.accessibility_status);
+        mStatusText           = view.findViewById(R.id.home_status_text);
+        mSessionTitle         = view.findViewById(R.id.home_session_title);
+        mInputEdit            = view.findViewById(R.id.home_input_edit);
+        mScreenCaptureStatus  = view.findViewById(R.id.screen_capture_status);
+        mAccessibilityStatus  = view.findViewById(R.id.accessibility_status);
+        mAttachmentPreviewRow = view.findViewById(R.id.attachment_preview_row);
+        mAttachmentNameText   = view.findViewById(R.id.attachment_name_text);
 
         // ── 历史会话抽屉 ──────────────────────────────────────────────────
         mSessionStore   = new SessionStore(requireContext());
@@ -141,17 +160,22 @@ public class HomeFragment extends Fragment {
         TextView emptyHint = view.findViewById(R.id.session_empty_hint);
         emptyHint.setVisibility(mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
 
-        MaterialButton btnHistory    = view.findViewById(R.id.btn_history);
-        MaterialButton btnSend       = view.findViewById(R.id.home_send_btn);
-        MaterialButton btnEnter      = view.findViewById(R.id.btn_enter);
-        MaterialButton btnStart      = view.findViewById(R.id.btn_start_claude);
-        MaterialButton btnStop       = view.findViewById(R.id.btn_stop_claude);
-        MaterialButton btnRestart    = view.findViewById(R.id.btn_restart_claude);
-        MaterialButton btnNewSession = view.findViewById(R.id.btn_new_session);
+        MaterialButton btnHistory      = view.findViewById(R.id.btn_history);
+        MaterialButton btnSend         = view.findViewById(R.id.home_send_btn);
+        MaterialButton btnEnter        = view.findViewById(R.id.btn_enter);
+        MaterialButton btnStart        = view.findViewById(R.id.btn_start_claude);
+        MaterialButton btnStop         = view.findViewById(R.id.btn_stop_claude);
+        MaterialButton btnRestart      = view.findViewById(R.id.btn_restart_claude);
+        MaterialButton btnNewSession   = view.findViewById(R.id.btn_new_session);
+        MaterialButton btnAttach       = view.findViewById(R.id.btn_attach_file);
+        MaterialButton btnClearAttach  = view.findViewById(R.id.btn_clear_attachment);
 
         btnHistory.setOnClickListener(v -> mDrawerLayout.openDrawer(android.view.Gravity.START));
 
         btnSend.setOnClickListener(v -> sendOrConfirm());
+
+        btnAttach.setOnClickListener(v -> pickFile());
+        btnClearAttach.setOnClickListener(v -> clearAttachment());
 
         // ⏎ 向当前可见 session 发送回车
         btnEnter.setOnClickListener(v -> terminal("\r"));
@@ -236,7 +260,15 @@ public class HomeFragment extends Fragment {
         if (mWaitingResponse) return;
 
         String text = mInputEdit.getText().toString().trim();
-        if (text.isEmpty()) { terminal("\r"); return; }
+        if (text.isEmpty() && mAttachmentPath == null) { terminal("\r"); return; }
+
+        // 有附件时拼接文件引用（附件路径 + 用户文字）
+        final String pendingPath = mAttachmentPath;
+        final String pendingName = mAttachmentName;
+        if (pendingPath != null) {
+            text = "[附件: " + pendingPath + "]\n" + text;
+        }
+        clearAttachment();
 
         // 检查 API Key
         ApiKeyStore store = new ApiKeyStore(requireContext());
@@ -248,15 +280,21 @@ public class HomeFragment extends Fragment {
                 if (e.id.equals(activeId)) { apiKey = e.value; baseUrl = e.baseUrl; break; }
             }
         }
+        // 用于 UI 显示的简洁文本（不含路径）
+        String displayText = (mInputEdit.getText().toString().trim().isEmpty() && pendingName != null)
+                ? "[📎 " + pendingName + "]" : mInputEdit.getText().toString().trim();
+        if (pendingPath != null && !mInputEdit.getText().toString().trim().isEmpty()) {
+            displayText = "[📎 " + pendingName + "] " + mInputEdit.getText().toString().trim();
+        }
         if (apiKey == null || apiKey.isEmpty()) {
-            mAdapter.addMessage(ChatMessage.user(text));
+            mAdapter.addMessage(ChatMessage.user(displayText));
             mInputEdit.setText("");
             mAdapter.addMessage(ChatMessage.assistant("⚠ 请先在「API Key」页面添加并激活一个 API Key。"));
             scrollToBottom();
             return;
         }
 
-        mAdapter.addMessage(ChatMessage.user(text));
+        mAdapter.addMessage(ChatMessage.user(displayText));
         scrollToBottom();
         mInputEdit.setText("");
         mAdapter.addMessage(ChatMessage.assistant("…"));
@@ -267,7 +305,7 @@ public class HomeFragment extends Fragment {
 
         final String finalKey        = apiKey;
         final String finalBaseUrl    = baseUrl;
-        final String finalText       = text;
+        final String finalText       = text; // 含附件路径的完整文本，发给 Claude Code
         final boolean doContinue     = mSessionStarted;
         final String finalResumeId   = mResumeSessionId;
 
@@ -423,6 +461,116 @@ public class HomeFragment extends Fragment {
         if (baseUrl != null && !baseUrl.isEmpty()) {
             env.put("ANTHROPIC_BASE_URL", baseUrl);
         }
+    }
+
+    // =========================================================================
+    // 文件附件
+    // =========================================================================
+
+    private void pickFile() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(
+            Intent.createChooser(intent, "选择文件或图片"),
+            REQUEST_CODE_PICK_FILE);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_PICK_FILE
+                && resultCode == Activity.RESULT_OK
+                && data != null && data.getData() != null) {
+            copyFileAsync(data.getData());
+        }
+    }
+
+    private void copyFileAsync(Uri uri) {
+        mAttachmentPreviewRow.setVisibility(View.VISIBLE);
+        mAttachmentNameText.setText("📎 准备中…");
+
+        new Thread(() -> {
+            try {
+                String name = resolveDisplayName(uri);
+
+                // Step 1: stream URI → app cache (Java has full access here)
+                File cacheFile = new File(requireContext().getCacheDir(), "upload_src");
+                try (InputStream in  = requireContext().getContentResolver().openInputStream(uri);
+                     FileOutputStream out = new FileOutputStream(cacheFile)) {
+                    if (in == null) throw new Exception("无法打开文件");
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                }
+
+                // Step 2: use proot-distro login with --bind to copy the file into
+                // the proot home dir. Using ~ expansion means it works regardless of
+                // whether Claude Code runs as root or as a named user.
+                // The shell echoes the final path so we can tell Claude Code where to read.
+                final String finalName = name.replace("'", "_"); // simplify name for shell safety
+                String shell = "mkdir -p ~/uploads"
+                    + " && cp /tmp/.upload_src ~/uploads/'" + finalName + "'"
+                    + " && echo ~/uploads/'" + finalName + "'";
+
+                // No --user: defaults to root in proot, which matches how sendOrConfirm
+                // runs claude -p (also root, cwd /root). File lands in /root/uploads/
+                // which is inside Claude Code's trusted directory tree.
+                ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+                    "--bind", cacheFile.getAbsolutePath() + ":/tmp/.upload_src",
+                    "--", "sh", "-c", shell);
+                setupEnv(pb.environment(), "", "");
+                pb.redirectErrorStream(false);
+                Process proc = pb.start();
+
+                String prootPath = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream())).readLine();
+                int exit = proc.waitFor();
+                //noinspection ResultOfMethodCallIgnored
+                cacheFile.delete();
+
+                if (exit != 0 || prootPath == null || prootPath.trim().isEmpty()) {
+                    throw new Exception("proot copy 失败 (exit " + exit + ")");
+                }
+
+                final String finalProotPath = prootPath.trim();
+                mHandler.post(() -> {
+                    mAttachmentPath = finalProotPath; // proot-visible path passed to Claude Code
+                    mAttachmentName = finalName;
+                    mAttachmentNameText.setText("📎 " + finalName);
+                });
+            } catch (Exception e) {
+                mHandler.post(() -> {
+                    mAttachmentPreviewRow.setVisibility(View.GONE);
+                    Toast.makeText(getContext(), "文件加载失败: " + e.getMessage(),
+                        Toast.LENGTH_SHORT).show();
+                });
+            }
+        }, "file-copy").start();
+    }
+
+    private String resolveDisplayName(Uri uri) {
+        String name = null;
+        try (Cursor c = requireContext().getContentResolver()
+                .query(uri, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0) name = c.getString(idx);
+            }
+        } catch (Exception ignored) {}
+        if (name == null || name.isEmpty()) {
+            String path = uri.getPath();
+            if (path != null && path.contains("/"))
+                name = path.substring(path.lastIndexOf('/') + 1);
+        }
+        return (name != null && !name.isEmpty()) ? name : "attachment_" + System.currentTimeMillis();
+    }
+
+    private void clearAttachment() {
+        mAttachmentPath = null;
+        mAttachmentName = null;
+        if (mAttachmentPreviewRow != null)
+            mAttachmentPreviewRow.setVisibility(View.GONE);
     }
 
     // =========================================================================
