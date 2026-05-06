@@ -1,0 +1,4 @@
+# 快照文件 171MB，不入 git，构建前手动放置或 CI 下载
+*.tar.xz
+*.tar.gz
+*.tar.zst

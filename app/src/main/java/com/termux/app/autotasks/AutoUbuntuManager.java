@@ -73,6 +73,67 @@ public class AutoUbuntuManager {
 
         mAutoLaunchAttempted = true;
 
+        // 快速路径：rootfs 已存在，直接进入配置 + 登录（后台线程避免主线程阻塞）
+        if (new File(UbuntuSnapshotManager.UBUNTU_ROOTFS).isDirectory()) {
+            new Thread(() -> launchSetupScript(session), "ubuntu-setup").start();
+            return;
+        }
+
+        // rootfs 缺失：后台尝试快照部署，完成后再运行安装脚本
+        writeEcho(session, "[*] Ubuntu 环境未检测到，准备部署...");
+        Thread t = new Thread(() -> {
+            boolean deployed = false;
+
+            // 优先级 1：APK 内置快照（离线）
+            if (UbuntuSnapshotManager.hasAsset(mActivity.getAssets())) {
+                writeEcho(session, "[*] 发现内置快照，离线部署中 (171MB)...");
+                final boolean[] ok = {false};
+                UbuntuSnapshotManager.deployFromAsset(mActivity.getAssets(),
+                    makeSnapshotCallback(session, ok));
+                deployed = ok[0];
+            }
+
+            // 优先级 2：从 GitHub Release 下载
+            if (!deployed) {
+                writeEcho(session, "[*] 从 GitHub 下载快照 (171MB)，请稍候...");
+                final boolean[] ok = {false};
+                UbuntuSnapshotManager.deploy(makeSnapshotCallback(session, ok));
+                deployed = ok[0];
+            }
+
+            writeEcho(session, deployed
+                ? "[✓] 快照部署完成，继续环境配置..."
+                : "[!] 快照部署失败，回退到逐步网络安装...");
+
+            launchSetupScript(session);
+        }, "ubuntu-snapshot-deploy");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 将快照部署进度写到终端，返回成功标志的回调。 */
+    private UbuntuSnapshotManager.Callback makeSnapshotCallback(
+            TerminalSession session, boolean[] ok) {
+        return new UbuntuSnapshotManager.Callback() {
+            int lastP10 = -1;
+            @Override public void onStatus(String msg) { writeEcho(session, msg); }
+            @Override public void onProgress(int pct) {
+                int p10 = pct / 10;
+                if (p10 != lastP10) { lastP10 = p10; writeEcho(session, "[↓] " + pct + "%"); }
+            }
+            @Override public void onSuccess() { ok[0] = true; }
+            @Override public void onFailed(String reason) { writeEcho(session, "[!] " + reason); }
+        };
+    }
+
+    /** 向终端 stdin 写一条 echo 命令（shell 会立即执行并显示输出）。 */
+    private static void writeEcho(TerminalSession session, String msg) {
+        String safe = msg.replace("'", "'\\''");
+        session.write("echo '" + safe + "'\n");
+    }
+
+    /** 等待 assets 准备完毕，然后向终端写入安装脚本命令。 */
+    private void launchSetupScript(TerminalSession session) {
         // 若后台提取仍在进行，最多等待 5 秒，超时则放弃本地包走网络
         if (!mExtractionDone) {
             long deadline = System.currentTimeMillis() + 5000;
@@ -84,7 +145,6 @@ public class AutoUbuntuManager {
         if (mAgentServerManager != null) {
             mAgentServerManager.awaitExtraction(5000);
         }
-
         // 脚本写入临时文件再执行，避免超长单行命令超出 pty 输入缓冲区（N_TTY_BUF_SIZE=4096）被截断
         String scriptPath = writeScriptToFile();
         if (scriptPath != null) {

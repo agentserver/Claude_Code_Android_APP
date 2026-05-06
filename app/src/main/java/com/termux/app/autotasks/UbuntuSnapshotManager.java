@@ -1,5 +1,6 @@
 package com.termux.app.autotasks;
 
+import android.content.res.AssetManager;
 import android.util.Log;
 
 import com.termux.shared.termux.TermuxConstants;
@@ -33,7 +34,11 @@ public class UbuntuSnapshotManager {
         "https://github.com/Zeta112233/Claude_code_Android_app/releases/download/snapshot-v1/ubuntu-claude-aarch64-20260506.tar.xz";
     public static final String SNAPSHOT_SHA256 =
         "a4ac7948c7f82c5fb9559546ca0f783b938f2e932f165bc6c77d6e790b99b69d";
-    public static final long   SNAPSHOT_BYTES = 179_306_496L; // 171MB，用于进度计算
+    public static final long   SNAPSHOT_BYTES = 178_310_108L; // 实际字节数，用于进度计算
+
+    // APK 内置快照 asset 路径（构建时手动放置，不入 git）
+    static final String SNAPSHOT_ASSET_NAME =
+        "ubuntu-snapshot/ubuntu-claude-aarch64-20260506.tar.xz";
 
     // ── 路径 ──────────────────────────────────────────────────────────────
     private static final String PREFIX    = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
@@ -41,7 +46,8 @@ public class UbuntuSnapshotManager {
     private static final String PROOT_D   = PREFIX + "/bin/proot-distro";
     private static final String ROOTFS_DIR =
         PREFIX + "/var/lib/proot-distro/installed-rootfs";
-    private static final String UBUNTU_ROOTFS = ROOTFS_DIR + "/ubuntu";
+    // package-private：供 AutoUbuntuManager 检查 rootfs 是否存在
+    static final String UBUNTU_ROOTFS = ROOTFS_DIR + "/ubuntu";
     private static final String TMP_TAR   =
         TermuxConstants.TERMUX_HOME_DIR_PATH + "/.ubuntu-snapshot-tmp.tar.xz";
 
@@ -76,6 +82,50 @@ public class UbuntuSnapshotManager {
             return p.waitFor() == 0;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 检查 APK assets 中是否内置了快照文件。 */
+    public static boolean hasAsset(AssetManager assets) {
+        try {
+            assets.open(SNAPSHOT_ASSET_NAME).close();
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 从 APK 内置 asset 部署（离线，无 SHA256 校验——APK 签名即保证完整性）。
+     * 在后台线程调用。
+     */
+    public static void deployFromAsset(AssetManager assets, Callback cb) {
+        try {
+            File tmp = new File(TMP_TAR);
+            cb.onStatus("从安装包提取快照（171MB）…");
+            try (InputStream in = assets.open(SNAPSHOT_ASSET_NAME);
+                 OutputStream out = Files.newOutputStream(tmp.toPath())) {
+                byte[] buf = new byte[65536];
+                long copied = 0;
+                int n, lastPct = -1;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                    copied += n;
+                    int pct = (int) Math.min(copied * 100 / SNAPSHOT_BYTES, 100);
+                    if (pct != lastPct) { lastPct = pct; cb.onProgress(pct); }
+                }
+            }
+            cb.onStatus("清除旧环境…");
+            deleteRootfs();
+            cb.onStatus("解压中（可能需要 1-2 分钟）…");
+            extract(tmp, cb);
+            tmp.delete();
+            cb.onStatus("部署完成");
+            cb.onSuccess();
+        } catch (Exception e) {
+            Log.e(TAG, "deployFromAsset failed", e);
+            new File(TMP_TAR).delete();
+            cb.onFailed(e.getMessage());
         }
     }
 
