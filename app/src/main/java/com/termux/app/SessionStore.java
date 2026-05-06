@@ -88,6 +88,15 @@ public class SessionStore {
         saveAll(list);
     }
 
+    /** 删除指定 session ID 的记录。 */
+    public void delete(String sessionId) {
+        List<Entry> list = loadAll();
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (list.get(i).id.equals(sessionId)) { list.remove(i); break; }
+        }
+        saveAll(list);
+    }
+
     private void saveAll(List<Entry> list) {
         SharedPreferences.Editor ed = mPrefs.edit();
         ed.putInt(K_COUNT, list.size());

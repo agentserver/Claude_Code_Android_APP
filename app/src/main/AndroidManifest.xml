@@ -233,6 +233,10 @@
             android:exported="false" />
 
         <service
+            android:name=".app.FloatingStatusService"
+            android:exported="false" />
+
+        <service
             android:name=".app.mcp.ScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />

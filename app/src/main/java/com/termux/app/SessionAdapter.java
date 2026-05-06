@@ -17,6 +17,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.VH> {
 
     public interface Listener {
         void onSessionSelected(SessionStore.Entry entry);
+        void onSessionLongPress(SessionStore.Entry entry);
     }
 
     private final List<SessionStore.Entry> mEntries;
@@ -51,6 +52,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.VH> {
         boolean active = e.id.equals(mActiveId);
         holder.itemView.setBackgroundColor(active ? 0xFFE3F2FD : 0x00000000);
         holder.itemView.setOnClickListener(v -> mListener.onSessionSelected(e));
+        holder.itemView.setOnLongClickListener(v -> { mListener.onSessionLongPress(e); return true; });
     }
 
     @Override

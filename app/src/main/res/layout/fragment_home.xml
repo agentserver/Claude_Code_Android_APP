@@ -94,65 +94,59 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="6dp">
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_start_claude"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="32dp"
                     android:layout_weight="1"
-                    android:layout_marginEnd="3dp"
+                    android:layout_marginEnd="2dp"
                     android:text="启动"
-                    android:textColor="#1976D2"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#1976D2" />
+                    android:backgroundTint="#4CAF50"
+                    android:textColor="@android:color/white" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_stop_claude"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="32dp"
                     android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
+                    android:layout_marginEnd="2dp"
                     android:text="停止"
-                    android:textColor="#E53935"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#E53935" />
+                    android:backgroundTint="#F44336"
+                    android:textColor="@android:color/white" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_restart_claude"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="32dp"
                     android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
+                    android:layout_marginEnd="2dp"
                     android:text="重启"
-                    android:textColor="#F57C00"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#F57C00" />
+                    android:backgroundTint="#FF9800"
+                    android:textColor="@android:color/white" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_new_session"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="32dp"
                     android:layout_weight="1"
-                    android:layout_marginStart="3dp"
                     android:text="新建"
-                    android:textColor="#388E3C"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#388E3C" />
+                    android:backgroundTint="#2196F3"
+                    android:textColor="@android:color/white" />
 
             </LinearLayout>
 
@@ -171,20 +165,18 @@
                     android:layout_weight="1"
                     android:text="● 无障碍: 未启用"
                     android:textColor="#888888"
-                    android:textSize="12sp"
-                    android:gravity="center_vertical" />
+                    android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_accessibility"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="28dp"
+                    android:layout_height="32dp"
                     android:text="开启无障碍"
-                    android:textColor="#1565C0"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#1565C0" />
+                    app:strokeColor="#BDBDBD" />
 
             </LinearLayout>
 
@@ -194,7 +186,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="6dp">
+                android:layout_marginBottom="4dp">
 
                 <TextView
                     android:id="@+id/screen_capture_status"
@@ -203,20 +195,18 @@
                     android:layout_weight="1"
                     android:text="● 截图: 未授权"
                     android:textColor="#888888"
-                    android:textSize="12sp"
-                    android:gravity="center_vertical" />
+                    android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_screen_capture"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="28dp"
+                    android:layout_height="32dp"
                     android:text="授权截图"
-                    android:textColor="#7B1FA2"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
-                    app:strokeColor="#7B1FA2" />
+                    app:strokeColor="#BDBDBD" />
 
             </LinearLayout>
 
@@ -339,42 +329,203 @@
 
     </LinearLayout>
 
-    <!-- ── 左侧历史记录抽屉 ──────────────────────────────────────────────── -->
+    <!-- ── 左侧抽屉：历史 / 记忆 / 技能 ─────────────────────────────────── -->
     <LinearLayout
-        android:layout_width="280dp"
+        android:layout_width="288dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:orientation="vertical"
         android:background="#FAFAFA"
         android:elevation="8dp">
 
-        <TextView
+        <!-- Tab 栏 -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="历史对话"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#212121"
-            android:padding="16dp"
-            android:background="#F0F0F0" />
+            android:orientation="horizontal"
+            android:background="#F0F0F0">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/session_recycler"
+            <TextView
+                android:id="@+id/tab_history"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="历史"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#1976D2"
+                android:background="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/tab_memory"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="记忆"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:background="#F0F0F0" />
+
+            <TextView
+                android:id="@+id/tab_skills"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="技能"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:background="#F0F0F0" />
+
+        </LinearLayout>
+
+        <!-- 面板切换器 -->
+        <ViewFlipper
+            android:id="@+id/drawer_flipper"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:scrollbars="vertical" />
+            android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/session_empty_hint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="暂无历史记录\n完成一次对话后自动保存"
-            android:textColor="#AAAAAA"
-            android:textSize="13sp"
-            android:gravity="center"
-            android:padding="24dp"
-            android:visibility="gone" />
+            <!-- ── 面板 0：历史对话 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/session_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/session_empty_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="暂无历史记录\n完成一次对话后自动保存"
+                    android:textColor="#AAAAAA"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+            <!-- ── 面板 1：记忆库 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- 标题行 + 刷新 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="记忆库"
+                        android:textSize="13sp"
+                        android:textColor="#555555" />
+
+                    <TextView
+                        android:id="@+id/btn_memory_refresh"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔄"
+                        android:textSize="16sp"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/memory_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/memory_empty_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="记忆库为空"
+                    android:textColor="#AAAAAA"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+            <!-- ── 面板 2：技能 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- 标题行 + 新建 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="技能 (Slash Commands)"
+                        android:textSize="13sp"
+                        android:textColor="#555555" />
+
+                    <TextView
+                        android:id="@+id/btn_skill_add"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="＋"
+                        android:textSize="18sp"
+                        android:textColor="#1976D2"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/skills_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/skills_empty_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="暂无技能\n点击 ＋ 新建"
+                    android:textColor="#AAAAAA"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+        </ViewFlipper>
 
     </LinearLayout>
 

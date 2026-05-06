@@ -1,9 +1,13 @@
 package com.termux.app;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -60,7 +64,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         } else if (holder instanceof SystemViewHolder) {
             ((SystemViewHolder) holder).bind(msg.content);
         } else {
-            ((AssistantViewHolder) holder).bind(msg.content);
+            ((AssistantViewHolder) holder).bind(msg);
         }
     }
 
@@ -80,22 +84,45 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     /**
-     * 更新最后一条 ASSISTANT 消息的内容（用于实时追加 Claude 回复）。
+     * 更新最后一条 ASSISTANT 消息的正文和思考内容（流式调用）。
      * 如果不存在 ASSISTANT 消息则自动创建。
      */
-    public void updateLastAssistant(String content) {
+    public void updateLastAssistant(String content, String thinking) {
         for (int i = mMessages.size() - 1; i >= 0; i--) {
-            if (mMessages.get(i).type == ChatMessage.Type.ASSISTANT) {
-                if (!mMessages.get(i).content.equals(content)) {
-                    mMessages.get(i).content = content;
+            ChatMessage msg = mMessages.get(i);
+            if (msg.type == ChatMessage.Type.ASSISTANT) {
+                boolean changed = !msg.content.equals(content)
+                        || !java.util.Objects.equals(msg.thinking, thinking);
+                if (changed) {
+                    msg.content = content;
+                    msg.thinking = thinking;
                     notifyItemChanged(i);
                 }
                 return;
             }
         }
-        // 没有 ASSISTANT 消息时自动创建
-        if (!content.isEmpty()) {
-            addMessage(ChatMessage.assistant(content));
+        if (!content.isEmpty() || thinking != null) {
+            ChatMessage m = ChatMessage.assistant(content);
+            m.thinking = thinking;
+            addMessage(m);
+        }
+    }
+
+    /** 兼容旧调用（无思考内容）。 */
+    public void updateLastAssistant(String content) {
+        updateLastAssistant(content, null);
+    }
+
+    /** 回复完成后，将最后一条 ASSISTANT 消息的思考内容折叠。 */
+    public void collapseLastAssistantThinking() {
+        for (int i = mMessages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = mMessages.get(i);
+            if (msg.type == ChatMessage.Type.ASSISTANT && msg.thinking != null
+                    && !msg.thinkingCollapsed) {
+                msg.thinkingCollapsed = true;
+                notifyItemChanged(i);
+                return;
+            }
         }
     }
 
@@ -120,6 +147,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         UserViewHolder(View itemView) {
             super(itemView);
             mText = itemView.findViewById(R.id.msg_text);
+            itemView.setOnLongClickListener(v -> { copyToClipboard(v, mText.getText().toString()); return true; });
         }
 
         void bind(String content) {
@@ -129,14 +157,44 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     static class AssistantViewHolder extends RecyclerView.ViewHolder {
         private final TextView mText;
+        private final View     mThinkingContainer;
+        private final TextView mThinkingHeader;
+        private final TextView mThinkingText;
 
         AssistantViewHolder(View itemView) {
             super(itemView);
-            mText = itemView.findViewById(R.id.msg_text);
+            mText              = itemView.findViewById(R.id.msg_text);
+            mThinkingContainer = itemView.findViewById(R.id.thinking_container);
+            mThinkingHeader    = itemView.findViewById(R.id.thinking_header);
+            mThinkingText      = itemView.findViewById(R.id.thinking_text);
+            itemView.setOnLongClickListener(v -> { copyToClipboard(v, mText.getText().toString()); return true; });
         }
 
-        void bind(String content) {
-            mText.setText(content);
+        void bind(ChatMessage msg) {
+            mText.setText(msg.content);
+            String thinking = msg.thinking;
+            if (thinking == null || thinking.isEmpty()) {
+                mThinkingContainer.setVisibility(View.GONE);
+                return;
+            }
+            mThinkingContainer.setVisibility(View.VISIBLE);
+            mThinkingText.setText(thinking);
+            if (msg.thinkingCollapsed) {
+                mThinkingText.setVisibility(View.GONE);
+                mThinkingHeader.setText("💭 思考过程 ▶");
+            } else {
+                mThinkingText.setVisibility(View.VISIBLE);
+                mThinkingHeader.setText("💭 思考中… ▼");
+            }
+            mThinkingContainer.setOnClickListener(v -> {
+                if (mThinkingText.getVisibility() == View.VISIBLE) {
+                    mThinkingText.setVisibility(View.GONE);
+                    mThinkingHeader.setText("💭 思考过程 ▶");
+                } else {
+                    mThinkingText.setVisibility(View.VISIBLE);
+                    mThinkingHeader.setText(msg.thinkingCollapsed ? "💭 思考过程 ▼" : "💭 思考中… ▼");
+                }
+            });
         }
     }
 
@@ -146,10 +204,19 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         SystemViewHolder(View itemView) {
             super(itemView);
             mText = itemView.findViewById(R.id.msg_text);
+            itemView.setOnLongClickListener(v -> { copyToClipboard(v, mText.getText().toString()); return true; });
         }
 
         void bind(String content) {
             mText.setText(content);
+        }
+    }
+
+    private static void copyToClipboard(View v, String text) {
+        ClipboardManager cm = (ClipboardManager) v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("message", text));
+            Toast.makeText(v.getContext(), "已复制", Toast.LENGTH_SHORT).show();
         }
     }
 }

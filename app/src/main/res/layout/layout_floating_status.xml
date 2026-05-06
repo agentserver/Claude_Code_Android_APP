@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_floating_status"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:minWidth="160dp"
+    android:maxWidth="200dp">
+
+    <TextView
+        android:id="@+id/float_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Claude Code"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:alpha="0.7" />
+
+    <TextView
+        android:id="@+id/float_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="● 等待中"
+        android:textColor="#FF888888"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/float_preview"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="#FFAAAAAA"
+        android:textSize="10sp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:visibility="gone" />
+
+</LinearLayout>

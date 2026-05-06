@@ -6,7 +6,9 @@ public class ChatMessage {
     public enum Type { USER, ASSISTANT, SYSTEM }
 
     public final Type type;
-    public String content; // ASSISTANT 消息内容可原地更新（流式追加）
+    public String content;           // 回复正文，可流式更新
+    public String thinking;          // 思考过程原文（null = 无思考内容）
+    public boolean thinkingCollapsed; // true = 折叠显示（回复完成后）
 
     public ChatMessage(Type type, String content) {
         this.type = type;

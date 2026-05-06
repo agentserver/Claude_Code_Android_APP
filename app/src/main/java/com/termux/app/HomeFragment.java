@@ -1,6 +1,7 @@
 package com.termux.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -13,8 +14,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ViewFlipper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -73,6 +76,12 @@ public class HomeFragment extends Fragment {
     private static final String BASH    = PREFIX + "/bin/bash";
     private static final String PROOT_D = PREFIX + "/bin/proot-distro";
 
+    // Ubuntu rootfs 内 claude 用户目录
+    private static final String UBUNTU_CLAUDE_HOME =
+        PREFIX + "/var/lib/proot-distro/installed-rootfs/ubuntu/home/claude";
+    private static final String MEMORY_DIR = UBUNTU_CLAUDE_HOME + "/.claude/memory";
+    private static final String SKILLS_DIR = UBUNTU_CLAUDE_HOME + "/.claude/commands";
+
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     private DrawerLayout  mDrawerLayout;
@@ -93,10 +102,22 @@ public class HomeFragment extends Fragment {
     private String mAttachmentPath; // 已复制到 Termux home 的绝对路径
     private String mAttachmentName; // 用于 UI 显示的文件名
 
+    // ── 抽屉 Tab ──────────────────────────────────────────────────────────
+    private ViewFlipper mDrawerFlipper;
+    private TextView    mTabHistory, mTabMemory, mTabSkills;
+
     // ── 历史会话抽屉 ──────────────────────────────────────────────────────
     private SessionStore               mSessionStore;
     private List<SessionStore.Entry>   mSessionEntries;
     private SessionAdapter             mSessionAdapter;
+
+    // ── 记忆库 ────────────────────────────────────────────────────────────
+    private final List<DrawerFileAdapter.FileItem> mMemoryItems  = new ArrayList<>();
+    private DrawerFileAdapter                       mMemoryAdapter;
+
+    // ── 技能 ──────────────────────────────────────────────────────────────
+    private final List<DrawerFileAdapter.FileItem> mSkillsItems  = new ArrayList<>();
+    private DrawerFileAdapter                       mSkillsAdapter;
 
     // ── Claude 子进程 ──────────────────────────────────────────────────────
     private Process mClaudeProcess;
@@ -146,19 +167,76 @@ public class HomeFragment extends Fragment {
         mAttachmentPreviewRow = view.findViewById(R.id.attachment_preview_row);
         mAttachmentNameText   = view.findViewById(R.id.attachment_name_text);
 
+        // ── 抽屉 Tab 栏 ───────────────────────────────────────────────────
+        mDrawerFlipper = view.findViewById(R.id.drawer_flipper);
+        mTabHistory    = view.findViewById(R.id.tab_history);
+        mTabMemory     = view.findViewById(R.id.tab_memory);
+        mTabSkills     = view.findViewById(R.id.tab_skills);
+
+        mTabHistory.setOnClickListener(v -> switchDrawerTab(0));
+        mTabMemory .setOnClickListener(v -> { switchDrawerTab(1); loadMemoryFiles(); });
+        mTabSkills .setOnClickListener(v -> { switchDrawerTab(2); loadSkillsFiles(); });
+
         // ── 历史会话抽屉 ──────────────────────────────────────────────────
         mSessionStore   = new SessionStore(requireContext());
         mSessionEntries = mSessionStore.loadAll();
-        mSessionAdapter = new SessionAdapter(mSessionEntries, mCurrentSessionId, entry -> {
-            resumeSession(entry);
-            mDrawerLayout.closeDrawers();
-        });
+        TextView emptyHint = view.findViewById(R.id.session_empty_hint);
+        mSessionAdapter = new SessionAdapter(mSessionEntries, mCurrentSessionId,
+            new SessionAdapter.Listener() {
+                @Override public void onSessionSelected(SessionStore.Entry entry) {
+                    resumeSession(entry);
+                    mDrawerLayout.closeDrawers();
+                }
+                @Override public void onSessionLongPress(SessionStore.Entry entry) {
+                    if (getContext() == null) return;
+                    new AlertDialog.Builder(getContext())
+                        .setTitle("删除这条历史记录？")
+                        .setMessage(entry.preview.isEmpty() ? "（空对话）" : entry.preview)
+                        .setPositiveButton("删除", (d, w) -> {
+                            mSessionStore.delete(entry.id);
+                            mSessionEntries.remove(entry);
+                            mSessionAdapter.notifyDataSetChanged();
+                            emptyHint.setVisibility(
+                                mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
+                }
+            });
         RecyclerView sessionRecycler = view.findViewById(R.id.session_recycler);
         sessionRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
         sessionRecycler.setAdapter(mSessionAdapter);
-
-        TextView emptyHint = view.findViewById(R.id.session_empty_hint);
         emptyHint.setVisibility(mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
+
+        // ── 记忆库 RecyclerView ───────────────────────────────────────────
+        mMemoryAdapter = new DrawerFileAdapter(mMemoryItems, new DrawerFileAdapter.Listener() {
+            @Override public void onTap(DrawerFileAdapter.FileItem item) {
+                showFileContentDialog(item.name, item.fullPath, false);
+            }
+            @Override public void onLongPress(DrawerFileAdapter.FileItem item) {
+                confirmDelete(item, mMemoryItems, mMemoryAdapter,
+                    view.findViewById(R.id.memory_empty_hint));
+            }
+        });
+        RecyclerView memoryRecycler = view.findViewById(R.id.memory_recycler);
+        memoryRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        memoryRecycler.setAdapter(mMemoryAdapter);
+        view.findViewById(R.id.btn_memory_refresh).setOnClickListener(v -> loadMemoryFiles());
+
+        // ── 技能 RecyclerView ─────────────────────────────────────────────
+        mSkillsAdapter = new DrawerFileAdapter(mSkillsItems, new DrawerFileAdapter.Listener() {
+            @Override public void onTap(DrawerFileAdapter.FileItem item) {
+                showFileContentDialog(item.name, item.fullPath, true);
+            }
+            @Override public void onLongPress(DrawerFileAdapter.FileItem item) {
+                confirmDelete(item, mSkillsItems, mSkillsAdapter,
+                    view.findViewById(R.id.skills_empty_hint));
+            }
+        });
+        RecyclerView skillsRecycler = view.findViewById(R.id.skills_recycler);
+        skillsRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        skillsRecycler.setAdapter(mSkillsAdapter);
+        view.findViewById(R.id.btn_skill_add).setOnClickListener(v -> showNewSkillDialog());
 
         MaterialButton btnHistory      = view.findViewById(R.id.btn_history);
         MaterialButton btnSend         = view.findViewById(R.id.home_send_btn);
@@ -180,11 +258,10 @@ public class HomeFragment extends Fragment {
         // ⏎ 向当前可见 session 发送回车
         btnEnter.setOnClickListener(v -> terminal("\r"));
 
-        // "启动"：新建 session，运行交互式 Claude（inline 注入 API Key，避免 .bashrc 早返回问题）
+        // "启动"：新建 session，运行交互式 Claude
         btnStart.setOnClickListener(v -> {
             TermuxActivity a = act();
             if (a != null) {
-                // 读取当前激活的 Key
                 ApiKeyStore store2   = new ApiKeyStore(requireContext());
                 String activeId2     = store2.getActiveId();
                 String startKey      = "";
@@ -247,10 +324,35 @@ public class HomeFragment extends Fragment {
                 a.requestScreenCapturePermission();
             }
         });
+
+        // 悬浮窗权限检查：未授权时点击状态栏跳转设置
+        if (!android.provider.Settings.canDrawOverlays(requireContext())) {
+            mStatusText.setText("● 点此授权悬浮窗");
+            mStatusText.setTextColor(0xFFFF6F00);
+            mStatusText.setOnClickListener(v -> {
+                Intent oi = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:" + requireContext().getPackageName()));
+                startActivity(oi);
+                mStatusText.setOnClickListener(null);
+            });
+        }
     }
 
-    @Override public void onResume() { super.onResume(); startStatusPolling(); }
-    @Override public void onPause()  { super.onPause();  stopStatusPolling();  }
+    @Override
+    public void onResume() {
+        super.onResume();
+        startStatusPolling();
+        // 回到界面后若已授权，清除授权提示
+        if (android.provider.Settings.canDrawOverlays(requireContext()) && mStatusText != null) {
+            mStatusText.setOnClickListener(null);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        stopStatusPolling();
+    }
 
     // =========================================================================
     // 发送 — ProcessBuilder 独立进程
@@ -302,6 +404,7 @@ public class HomeFragment extends Fragment {
 
         mWaitingResponse = true;
         updateStatus("● 运行中", 0xFF1565C0);
+        FloatingStatusService.updateStatus("● 运行中", 0xFF1565C0, displayText);
 
         final String finalKey        = apiKey;
         final String finalBaseUrl    = baseUrl;
@@ -325,11 +428,13 @@ public class HomeFragment extends Fragment {
                         ? " --resume " + finalResumeId
                         : (doContinue ? " --continue" : "");
 
+                // 2>/dev/null：claude 的 verbose stderr（系统提示回显等）不展示给用户；
+                // 真正的错误通过 JSONL type=result is_error 字段捕获。
                 String claudeCmd = "printf '%s' '" + escaped + "'"
                         + " | ANTHROPIC_API_KEY='" + escapedKey + "'"
                         + (finalBaseUrl.isEmpty() ? "" : " ANTHROPIC_BASE_URL='" + escapedUrl + "'")
-                        + " claude -p --output-format stream-json --verbose"
-                        + sessionFlag;
+                        + " claude -p --output-format stream-json --verbose --dangerously-skip-permissions"
+                        + sessionFlag + " 2>/dev/null";
 
                 ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu", "--user", "claude", "--", "sh", "-c", claudeCmd);
                 setupEnv(pb.environment(), finalKey, finalBaseUrl);
@@ -393,15 +498,25 @@ public class HomeFragment extends Fragment {
                         mHandler.post(() -> { mAdapter.addMessage(ChatMessage.system(info)); scrollToBottom(); });
                         continue;
                     }
-                    // type=result：捕获 session_id
+                    // type=result：捕获 session_id，并折叠思考内容
                     String sid = extractSessionId(t);
-                    if (sid != null) { capturedSessId = sid; continue; }
-                    // type=assistant：更新回复气泡
-                    String snap = extractText(t);
+                    if (sid != null) {
+                        if (sid.startsWith("ERR:")) {
+                            final String errText = "⚠ " + sid.substring(4);
+                            mHandler.post(() -> { mAdapter.updateLastAssistant(errText); scrollToBottom(); });
+                        } else {
+                            capturedSessId = sid;
+                        }
+                        mHandler.post(() -> mAdapter.collapseLastAssistantThinking());
+                        continue;
+                    }
+                    // type=assistant：更新回复气泡（含思考内容）
+                    String[] snap = extractAssistant(t);
                     if (snap != null) {
-                        lastSnapshot = snap;
-                        final String ui = lastSnapshot;
-                        mHandler.post(() -> { mAdapter.updateLastAssistant(ui); scrollToBottom(); });
+                        lastSnapshot = snap[0];
+                        final String ui = snap[0];
+                        final String th = snap[1];
+                        mHandler.post(() -> { mAdapter.updateLastAssistant(ui, th); scrollToBottom(); });
                     }
                 }
                 mClaudeProcess.waitFor();
@@ -429,6 +544,7 @@ public class HomeFragment extends Fragment {
                     refreshSessionDrawer();
                 }
                 updateStatus("● 就绪", 0xFF2E7D32);
+                FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "");
             });
         }, "ClaudeProcess");
         mClaudeThread.setDaemon(true);
@@ -446,6 +562,7 @@ public class HomeFragment extends Fragment {
         }
         mWaitingResponse = false;
         updateStatus("● 就绪", 0xFF2E7D32);
+        FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "");
     }
 
     /** 设置子进程所需的 Termux + ubuntu 环境变量。 */
@@ -582,13 +699,20 @@ public class HomeFragment extends Fragment {
      * 替代 TTY 模式下的 workspace trust 对话框。
      * 返回 null 表示不是 system init 事件。
      */
-    /** 从 type=result 事件中提取 session_id，供 --resume 使用。 */
+    /**
+     * 从 type=result 事件中提取 session_id，供 --resume 使用。
+     * 若 is_error=true，返回特殊前缀 "ERR:" + 错误文本，供调用方展示。
+     */
     @Nullable
     private String extractSessionId(String jsonLine) {
         if (!jsonLine.contains("\"type\":\"result\"")) return null;
         try {
             JSONObject obj = new JSONObject(jsonLine);
             if (!"result".equals(obj.optString("type"))) return null;
+            if (obj.optBoolean("is_error", false)) {
+                String errMsg = obj.optString("result", "Claude 返回错误");
+                return "ERR:" + errMsg;
+            }
             String sid = obj.optString("session_id", "");
             return sid.isEmpty() ? null : sid;
         } catch (Exception ignored) { return null; }
@@ -649,12 +773,12 @@ public class HomeFragment extends Fragment {
     // =========================================================================
 
     /**
-     * 从单行 JSONL 中提取 type=assistant 的文字快照。
+     * 从单行 JSONL 中提取 type=assistant 事件的正文和思考内容。
      * stream-json 格式下每个 assistant 事件是累积快照，取最后一个即可。
-     * 返回 null 表示本行不是 assistant 事件或无文字内容。
+     * 返回 [text, thinking]（thinking 可为 null），不是 assistant 事件则返回 null。
      */
     @Nullable
-    private String extractText(String jsonLine) {
+    private String[] extractAssistant(String jsonLine) {
         if (!jsonLine.contains("\"type\":\"assistant\"")) return null;
         try {
             JSONObject obj = new JSONObject(jsonLine);
@@ -663,18 +787,30 @@ public class HomeFragment extends Fragment {
             if (msg == null) return null;
             JSONArray content = msg.optJSONArray("content");
             if (content == null) return null;
-            StringBuilder sb = new StringBuilder();
+            StringBuilder textSb     = new StringBuilder();
+            StringBuilder thinkingSb = new StringBuilder();
             for (int i = 0; i < content.length(); i++) {
                 JSONObject item = content.getJSONObject(i);
-                if ("text".equals(item.optString("type"))) {
+                String itemType = item.optString("type");
+                if ("text".equals(itemType)) {
                     String txt = item.optString("text");
                     if (!txt.isEmpty()) {
-                        if (sb.length() > 0) sb.append("\n");
-                        sb.append(txt);
+                        if (textSb.length() > 0) textSb.append("\n");
+                        textSb.append(txt);
+                    }
+                } else if ("thinking".equals(itemType)) {
+                    String th = item.optString("thinking");
+                    if (!th.isEmpty()) {
+                        if (thinkingSb.length() > 0) thinkingSb.append("\n");
+                        thinkingSb.append(th);
                     }
                 }
             }
-            return sb.length() > 0 ? sb.toString().trim() : null;
+            if (textSb.length() == 0 && thinkingSb.length() == 0) return null;
+            return new String[]{
+                textSb.toString().trim(),
+                thinkingSb.length() > 0 ? thinkingSb.toString().trim() : null
+            };
         } catch (Exception ignored) {
             return null;
         }
@@ -774,7 +910,6 @@ public class HomeFragment extends Fragment {
             mScreenCaptureStatus.setText("● 截图: 未授权");
             mScreenCaptureStatus.setTextColor(0xFF888888);
         }
-        // Update button label
         View btn = getView();
         if (btn != null) {
             MaterialButton b = btn.findViewById(R.id.btn_screen_capture);
@@ -832,5 +967,249 @@ public class HomeFragment extends Fragment {
     private TermuxActivity act() {
         return (getActivity() instanceof TermuxActivity)
             ? (TermuxActivity) getActivity() : null;
+    }
+
+    // =========================================================================
+    // 抽屉 Tab 切换
+    // =========================================================================
+
+    private void switchDrawerTab(int index) {
+        mDrawerFlipper.setDisplayedChild(index);
+        int activeColor   = 0xFF1976D2;
+        int inactiveColor = 0xFF888888;
+        String activeBg   = "#FFFFFF";
+        String inactiveBg = "#F0F0F0";
+        TextView[] tabs = { mTabHistory, mTabMemory, mTabSkills };
+        for (int i = 0; i < tabs.length; i++) {
+            tabs[i].setTextColor(i == index ? activeColor : inactiveColor);
+            tabs[i].setBackgroundColor(android.graphics.Color.parseColor(
+                i == index ? activeBg : inactiveBg));
+        }
+    }
+
+    // =========================================================================
+    // 记忆库
+    // =========================================================================
+
+    private void loadMemoryFiles() {
+        new Thread(() -> {
+            File dir = new File(MEMORY_DIR);
+            List<DrawerFileAdapter.FileItem> items = new ArrayList<>();
+            if (dir.isDirectory()) {
+                File[] files = dir.listFiles(f -> f.isFile() && f.getName().endsWith(".md"));
+                if (files != null) {
+                    for (File f : files) {
+                        String name    = f.getName().replaceAll("\\.md$", "");
+                        String preview = readPreview(f);
+                        items.add(new DrawerFileAdapter.FileItem(name, preview, f.getAbsolutePath()));
+                    }
+                }
+            }
+            mHandler.post(() -> {
+                mMemoryItems.clear();
+                mMemoryItems.addAll(items);
+                mMemoryAdapter.notifyDataSetChanged();
+                View root = getView();
+                if (root != null) {
+                    root.findViewById(R.id.memory_empty_hint)
+                        .setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+            });
+        }, "load-memory").start();
+    }
+
+    // =========================================================================
+    // 技能
+    // =========================================================================
+
+    private void loadSkillsFiles() {
+        new Thread(() -> {
+            File dir = new File(SKILLS_DIR);
+            List<DrawerFileAdapter.FileItem> items = new ArrayList<>();
+            if (dir.isDirectory()) {
+                File[] files = dir.listFiles(f -> f.isFile() && f.getName().endsWith(".md"));
+                if (files != null) {
+                    for (File f : files) {
+                        String name    = f.getName().replaceAll("\\.md$", "");
+                        String preview = readFirstMeaningfulLine(f);
+                        items.add(new DrawerFileAdapter.FileItem(name, preview, f.getAbsolutePath()));
+                    }
+                }
+            }
+            mHandler.post(() -> {
+                mSkillsItems.clear();
+                mSkillsItems.addAll(items);
+                mSkillsAdapter.notifyDataSetChanged();
+                View root = getView();
+                if (root != null) {
+                    root.findViewById(R.id.skills_empty_hint)
+                        .setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+            });
+        }, "load-skills").start();
+    }
+
+    private void showNewSkillDialog() {
+        if (getContext() == null) return;
+        View dialogView = LayoutInflater.from(getContext())
+            .inflate(android.R.layout.two_line_list_item, null);
+        // 用两个 EditText 构建简单对话框
+        LinearLayout ll = new LinearLayout(getContext());
+        ll.setOrientation(LinearLayout.VERTICAL);
+        ll.setPadding(48, 24, 48, 0);
+
+        EditText etName = new EditText(getContext());
+        etName.setHint("技能名称（如 phone）");
+        etName.setSingleLine(true);
+        ll.addView(etName);
+
+        EditText etContent = new EditText(getContext());
+        etContent.setHint("技能内容（Markdown）");
+        etContent.setMinLines(6);
+        etContent.setGravity(android.view.Gravity.TOP);
+        ll.addView(etContent);
+
+        new AlertDialog.Builder(getContext())
+            .setTitle("新建技能")
+            .setView(ll)
+            .setPositiveButton("保存", (d, w) -> {
+                String name    = etName.getText().toString().trim();
+                String content = etContent.getText().toString();
+                if (name.isEmpty()) { Toast.makeText(getContext(), "名称不能为空", Toast.LENGTH_SHORT).show(); return; }
+                saveSkill(name, content);
+            })
+            .setNegativeButton("取消", null)
+            .show();
+    }
+
+    private void saveSkill(String name, String content) {
+        new Thread(() -> {
+            try {
+                File dir  = new File(SKILLS_DIR);
+                //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+                File file = new File(dir, name + ".md");
+                java.nio.file.Files.write(file.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                mHandler.post(() -> {
+                    Toast.makeText(getContext(), "技能已保存", Toast.LENGTH_SHORT).show();
+                    loadSkillsFiles();
+                });
+            } catch (Exception e) {
+                mHandler.post(() -> Toast.makeText(getContext(), "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }, "save-skill").start();
+    }
+
+    // =========================================================================
+    // 通用文件操作
+    // =========================================================================
+
+    private void showFileContentDialog(String title, String path, boolean editable) {
+        if (getContext() == null) return;
+        new Thread(() -> {
+            String content;
+            try {
+                content = new String(java.nio.file.Files.readAllBytes(
+                    java.nio.file.Paths.get(path)), java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                content = "读取失败: " + e.getMessage();
+            }
+            final String text = content;
+            mHandler.post(() -> {
+                ScrollView sv = new ScrollView(getContext());
+                EditText et  = new EditText(getContext());
+                et.setText(text);
+                et.setTextSize(12f);
+                et.setFontVariationSettings(null);
+                et.setTypeface(android.graphics.Typeface.MONOSPACE);
+                et.setEnabled(editable);
+                et.setPadding(32, 16, 32, 16);
+                sv.addView(et);
+
+                AlertDialog.Builder b = new AlertDialog.Builder(getContext())
+                    .setTitle(title)
+                    .setView(sv)
+                    .setNegativeButton("关闭", null);
+                if (editable) {
+                    b.setPositiveButton("保存", (d, w) -> {
+                        String newContent = et.getText().toString();
+                        new Thread(() -> {
+                            try {
+                                java.nio.file.Files.write(java.nio.file.Paths.get(path),
+                                    newContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                                mHandler.post(() -> {
+                                    Toast.makeText(getContext(), "已保存", Toast.LENGTH_SHORT).show();
+                                    loadSkillsFiles();
+                                });
+                            } catch (Exception e) {
+                                mHandler.post(() -> Toast.makeText(getContext(),
+                                    "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                            }
+                        }, "save-file").start();
+                    });
+                }
+                b.show();
+            });
+        }, "read-file").start();
+    }
+
+    private void confirmDelete(DrawerFileAdapter.FileItem item,
+                               List<DrawerFileAdapter.FileItem> list,
+                               DrawerFileAdapter adapter,
+                               View emptyHint) {
+        if (getContext() == null) return;
+        new AlertDialog.Builder(getContext())
+            .setTitle("删除 " + item.name + "?")
+            .setMessage("此操作不可恢复")
+            .setPositiveButton("删除", (d, w) -> {
+                new Thread(() -> {
+                    boolean ok = new File(item.fullPath).delete();
+                    mHandler.post(() -> {
+                        if (ok) {
+                            list.remove(item);
+                            adapter.notifyDataSetChanged();
+                            if (emptyHint != null)
+                                emptyHint.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+                        } else {
+                            Toast.makeText(getContext(), "删除失败", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }, "delete-file").start();
+            })
+            .setNegativeButton("取消", null)
+            .show();
+    }
+
+    /** 读取文件前 120 字符作为预览（跳过 YAML frontmatter 横线）。 */
+    private String readPreview(File f) {
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+            StringBuilder sb  = new StringBuilder();
+            boolean inFront   = false;
+            boolean frontDone = false;
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!frontDone) {
+                    if (line.equals("---")) { inFront = !inFront; if (!inFront) frontDone = true; continue; }
+                    if (inFront) { if (line.startsWith("description:")) { return line.substring("description:".length()).trim(); } continue; }
+                }
+                if (!line.trim().isEmpty()) {
+                    sb.append(line.trim()).append(" ");
+                    if (sb.length() > 120) break;
+                }
+            }
+            return sb.toString().trim();
+        } catch (Exception e) { return ""; }
+    }
+
+    /** 读取文件第一个有意义的非标题行作为预览。 */
+    private String readFirstMeaningfulLine(File f) {
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty() && !line.startsWith("#") && !line.startsWith("---")) return line;
+            }
+        } catch (Exception ignored) {}
+        return "";
     }
 }

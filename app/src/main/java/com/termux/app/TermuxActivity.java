@@ -318,6 +318,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAutoTaskCoordinator != null) {
             mAutoTaskCoordinator.onStart();
         }
+
+        // App 回到前台：隐藏悬浮窗
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            startService(new android.content.Intent(this, FloatingStatusService.class)
+                .setAction(FloatingStatusService.ACTION_HIDE));
+        }
     }
 
     @Override
@@ -365,6 +371,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         unregisterTermuxActivityBroadcastReceiver();
         getDrawer().closeDrawers();
+
+        // App 切到后台：显示悬浮窗
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            startService(new android.content.Intent(this, FloatingStatusService.class)
+                .setAction(FloatingStatusService.ACTION_SHOW));
+        }
     }
 
     @Override
@@ -1000,8 +1012,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             drawer.closeDrawer(android.view.Gravity.START);
 
         drawer.setVisibility(View.GONE);
-        // 主页模式下显示原生 extra keys 工具栏（用户可直接操作终端控制键）
-        if (toolbar != null) toolbar.setVisibility(View.VISIBLE);
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
         container.setVisibility(View.VISIBLE);
 
         androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
@@ -1123,15 +1134,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 String content = new String(java.nio.file.Files.readAllBytes(logFile.toPath()),
                         java.nio.charset.StandardCharsets.UTF_8);
 
+                // 按时间戳头 "[HH:mm:ss] Role" 分段，不再用 \n\n 切割。
+                // 原来的 split("\n\n") 会把含空行的 Claude 回复切碎，导致后续段落
+                // 因没有头信息而被当成 SYSTEM 消息显示在灰色区域。
                 java.util.List<String[]> entries = new java.util.ArrayList<>();
-                for (String block : content.split("\n\n")) {
-                    String trimmed = block.trim();
-                    if (trimmed.isEmpty()) continue;
-                    int nl = trimmed.indexOf('\n');
-                    if (nl < 0) continue;
-                    String header = trimmed.substring(0, nl).trim();
-                    String body   = trimmed.substring(nl + 1).trim();
-                    if (!body.isEmpty()) entries.add(new String[]{header, body});
+                java.util.regex.Pattern headerPat =
+                    java.util.regex.Pattern.compile("^\\[\\d{2}:\\d{2}:\\d{2}\\] .+");
+                String[] lines = content.split("\n", -1);
+                String currentHeader = null;
+                StringBuilder currentBody = new StringBuilder();
+                for (String line : lines) {
+                    if (headerPat.matcher(line).matches()) {
+                        if (currentHeader != null) {
+                            String body = currentBody.toString().trim();
+                            if (!body.isEmpty()) entries.add(new String[]{currentHeader, body});
+                        }
+                        currentHeader = line;
+                        currentBody.setLength(0);
+                    } else {
+                        if (currentHeader != null) {
+                            if (currentBody.length() > 0) currentBody.append('\n');
+                            currentBody.append(line);
+                        }
+                    }
+                }
+                if (currentHeader != null) {
+                    String body = currentBody.toString().trim();
+                    if (!body.isEmpty()) entries.add(new String[]{currentHeader, body});
                 }
 
                 if (!entries.isEmpty()) {
