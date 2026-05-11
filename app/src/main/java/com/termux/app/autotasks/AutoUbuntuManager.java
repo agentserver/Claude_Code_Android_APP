@@ -154,6 +154,74 @@ public class AutoUbuntuManager {
 
         // 3. settings.json — 与 AutoClaudeManager 的 su -l claude claude mcp add 一致
         injectMcpSettings(new File(claudeHome, ".claude"));
+
+        // 4. claude 包装脚本 — 拦截 AgentServer 对 claude 的调用，
+        //    把任务 prompt 和 JSONL 输出写入 ~/.agentserver-pipe.jsonl，
+        //    供 Android App 实时显示 AgentServer 任务执行过程。
+        injectClaudeWrapper(claudeHome);
+    }
+
+    /**
+     * 注入 ~/.local/bin/claude 包装脚本。
+     * 优先级高于 /usr/local/bin/claude，对 AgentServer 调用透明拦截：
+     *   - 有 CLAUDE_DIRECT=1 或交互终端 → exec 真实 claude，不拦截（HomeFragment 直接调用）
+     *   - 其他（AgentServer 后台调用）→ 把 prompt(base64) 和 JSONL 输出追加到 pipe 文件
+     */
+    private static void injectClaudeWrapper(File claudeHome) {
+        File localBin = new File(claudeHome, ".local/bin");
+        localBin.mkdirs();
+        File wrapper = new File(localBin, "claude");
+        // 每次启动更新，保证脚本与当前版本一致
+        writeFile(wrapper,
+            "#!/bin/bash\n"
+            + "_REAL=/usr/local/bin/claude\n"
+            + "_PIPE=/home/claude/.agentserver-pipe.jsonl\n"
+            + "# 透传条件 1：HomeFragment 显式 CLAUDE_DIRECT=1\n"
+            + "# 透传条件 2：交互终端（tty stdin）\n"
+            + "if [ -n \"$CLAUDE_DIRECT\" ] || [ -t 0 ]; then exec \"$_REAL\" \"$@\"; fi\n"
+            + "# 透传条件 3：流式 JSON 输入模式（agentserver 长驻通道，"
+            +   "stdin 永不关闭，绝不能拦截）。同时给 stdout 做 tee 让 App 仍能看到响应。\n"
+            + "_STREAM_IN=\n"
+            + "_PREV=\n"
+            + "for _arg in \"$@\"; do\n"
+            + "  if [ \"$_PREV\" = \"--input-format\" ] && [ \"$_arg\" = \"stream-json\" ]; then\n"
+            + "    _STREAM_IN=1; break\n"
+            + "  fi\n"
+            + "  _PREV=\"$_arg\"\n"
+            + "done\n"
+            + "if [ -n \"$_STREAM_IN\" ]; then\n"
+            + "  _TS=$(date +%s%3N 2>/dev/null || echo \"$(( $(date +%s) * 1000 ))\")\n"
+            + "  printf '{\"type\":\"as_stream_session_start\",\"ts\":%s}\\n' \"$_TS\" >> \"$_PIPE\"\n"
+            + "  # tee stdin: 每行 base64 包装写入 pipe，同时透传给真 claude；tee stdout 给 pipe\n"
+            + "  cat | tee >( while IFS= read -r _l; do"
+            +   " printf '{\"type\":\"as_stream_in\",\"b64\":\"%s\"}\\n'"
+            +   " \"$(printf '%s' \"$_l\" | base64 -w0)\" >> \"$_PIPE\"; done )"
+            +   " | \"$_REAL\" \"$@\" 2>&1 | tee -a \"$_PIPE\"\n"
+            + "  exit ${PIPESTATUS[1]}\n"
+            + "fi\n"
+            + "# 透传条件 4：未传 -p / --print（长驻 / SDK 实例，不能拦截）\n"
+            + "_PRINT_MODE=\n"
+            + "for _arg in \"$@\"; do\n"
+            + "  case \"$_arg\" in\n"
+            + "    -p|--print) _PRINT_MODE=1; break;;\n"
+            + "  esac\n"
+            + "done\n"
+            + "if [ -z \"$_PRINT_MODE\" ]; then exec \"$_REAL\" \"$@\"; fi\n"
+            + "# 拦截路径：HomeFragment 风格的一次性 -p 任务（stdin 是有限内容）\n"
+            + "_TS=$(date +%s%3N 2>/dev/null || echo \"$(( $(date +%s) * 1000 ))\")\n"
+            + "_TMP=$(mktemp /tmp/cc-XXXXXX)\n"
+            + "cat > \"$_TMP\"\n"
+            + "_B64=$(base64 -w 0 < \"$_TMP\")\n"
+            + "printf '{\"type\":\"as_task_start\",\"ts\":%s,\"prompt_b64\":\"%s\"}\\n'"
+            + " \"$_TS\" \"$_B64\" >> \"$_PIPE\"\n"
+            + "\"$_REAL\" \"$@\" < \"$_TMP\" | tee -a \"$_PIPE\"\n"
+            + "_EXIT=${PIPESTATUS[0]}\n"
+            + "_TS2=$(date +%s%3N 2>/dev/null || echo \"$_TS\")\n"
+            + "printf '{\"type\":\"as_task_end\",\"ts\":%s}\\n' \"$_TS2\" >> \"$_PIPE\"\n"
+            + "rm -f \"$_TMP\"\n"
+            + "exit $_EXIT\n"
+        );
+        wrapper.setExecutable(true, false);
     }
 
     private static void writeFile(File dest, String content) {
@@ -199,20 +267,30 @@ public class AutoUbuntuManager {
                 try { settings = new JSONObject(existing); } catch (JSONException ignored) {}
             }
 
-            // 已有正确注册则跳过
+            boolean dirty = false;
+
+            // 1. MCP server 注册
             JSONObject servers = settings.optJSONObject("mcpServers");
-            if (servers != null && servers.has("android-mcp")) return;
-
-            if (servers == null) {
-                servers = new JSONObject();
-                settings.put("mcpServers", servers);
+            if (servers == null || !servers.has("android-mcp")) {
+                if (servers == null) {
+                    servers = new JSONObject();
+                    settings.put("mcpServers", servers);
+                }
+                JSONObject entry = new JSONObject();
+                entry.put("type", "http");
+                entry.put("url", "http://127.0.0.1:8765/mcp");
+                servers.put("android-mcp", entry);
+                dirty = true;
             }
-            JSONObject entry = new JSONObject();
-            entry.put("type", "http");
-            entry.put("url", "http://127.0.0.1:8765/mcp");
-            servers.put("android-mcp", entry);
 
-            writeFile(settingsFile, settings.toString(2));
+            // 2. 跳过权限对话框——AgentServer 在后台无人值守，必须设置此项；
+            //    否则 Claude Code 每次调用 MCP 工具都会弹出确认对话框并永久阻塞。
+            if (!settings.optBoolean("dangerouslySkipPermissions", false)) {
+                settings.put("dangerouslySkipPermissions", true);
+                dirty = true;
+            }
+
+            if (dirty) writeFile(settingsFile, settings.toString(2));
         } catch (Exception ignored) {}
     }
 
@@ -261,7 +339,14 @@ public class AutoUbuntuManager {
             + "1. `screen.capture` 观察当前屏幕\n"
             + "2. `ui.get_accessibility_tree` 分析 UI 结构，找到目标元素\n"
             + "3. `ui.click_text` / `ui.tap` 点击，`ui.input_text` 输入\n"
-            + "4. 再次截图确认结果，循环直到任务完成\n";
+            + "4. 再次截图确认结果，循环直到任务完成\n\n"
+
+            + "## 记忆系统\n\n"
+            + "**当用户要求「记住」某件事时，必须遵守以下规则：**\n\n"
+            + "- 将记忆保存为独立 `.md` 文件，路径：`~/.claude/memory/<描述性名称>.md`\n"
+            + "- 文件名用英文小写+下划线，如 `user_preference.md`、`api_key.md`\n"
+            + "- **不要修改 `~/CLAUDE.md`**（该文件由系统自动管理，每次启动会被覆盖）\n"
+            + "- 每次对话开始时，可读取 `~/.claude/memory/` 目录下的文件了解用户偏好\n";
     }
 
     /** 向终端 stdin 写一条 echo 命令（shell 会立即执行并显示输出）。 */

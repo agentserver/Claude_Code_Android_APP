@@ -2,7 +2,9 @@ package com.termux.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -104,7 +106,38 @@ public class HomeFragment extends Fragment {
 
     // ── 抽屉 Tab ──────────────────────────────────────────────────────────
     private ViewFlipper mDrawerFlipper;
-    private TextView    mTabHistory, mTabMemory, mTabSkills;
+    private TextView    mTabHistory, mTabMemory, mTabSkills, mTabAgentTask, mTabUploads;
+
+    // ── 上传文件面板 ──────────────────────────────────────────────────────
+    private UploadStore              mUploadStore;
+    private RecyclerView             mUploadRecycler;
+    private TextView                 mUploadEmptyHint;
+    private final List<UploadItem>   mUploadItems = new ArrayList<>();
+    private RecyclerView.Adapter<?>  mUploadAdapter;
+
+    static class UploadItem {
+        String sessionId;    // "__pending__" 或真实 sessionId
+        String filename;
+        String sessionLabel; // 会话时间字符串，或 "待关联"
+        UploadItem(String sessionId, String filename, String sessionLabel) {
+            this.sessionId    = sessionId;
+            this.filename     = filename;
+            this.sessionLabel = sessionLabel;
+        }
+    }
+
+    // ── AgentServer 任务面板 ──────────────────────────────────────────────
+    private static final String AGENT_PIPE_FILE = UBUNTU_CLAUDE_HOME + "/.agentserver-pipe.jsonl";
+    private static final String PREF_AGENT_PIPE = "agent_pipe";
+    private static final String KEY_AGENT_PIPE_OFFSET = "offset";
+    private RecyclerView          mAgentTaskRecycler;
+    private TextView              mAgentTaskEmptyHint;
+    private Thread                mAgentPipeWatcher;
+    private long                  mAgentPipeOffset = 0;
+    private AgentTaskStore        mAgentTaskStore;
+    private final List<AgentTask> mAgentTasks      = new ArrayList<>();
+    private AgentTaskListAdapter  mAgentTaskAdapter;
+    private AgentTask             mActiveAgentTask;
 
     // ── 历史会话抽屉 ──────────────────────────────────────────────────────
     private SessionStore               mSessionStore;
@@ -168,14 +201,84 @@ public class HomeFragment extends Fragment {
         mAttachmentNameText   = view.findViewById(R.id.attachment_name_text);
 
         // ── 抽屉 Tab 栏 ───────────────────────────────────────────────────
-        mDrawerFlipper = view.findViewById(R.id.drawer_flipper);
-        mTabHistory    = view.findViewById(R.id.tab_history);
-        mTabMemory     = view.findViewById(R.id.tab_memory);
-        mTabSkills     = view.findViewById(R.id.tab_skills);
+        mDrawerFlipper  = view.findViewById(R.id.drawer_flipper);
+        mTabHistory     = view.findViewById(R.id.tab_history);
+        mTabMemory      = view.findViewById(R.id.tab_memory);
+        mTabSkills      = view.findViewById(R.id.tab_skills);
+        mTabAgentTask   = view.findViewById(R.id.tab_agent_task);
 
-        mTabHistory.setOnClickListener(v -> switchDrawerTab(0));
-        mTabMemory .setOnClickListener(v -> { switchDrawerTab(1); loadMemoryFiles(); });
-        mTabSkills .setOnClickListener(v -> { switchDrawerTab(2); loadSkillsFiles(); });
+        mTabUploads     = view.findViewById(R.id.tab_uploads);
+
+        mTabHistory  .setOnClickListener(v -> switchDrawerTab(0));
+        mTabMemory   .setOnClickListener(v -> { switchDrawerTab(1); loadMemoryFiles(); });
+        mTabSkills   .setOnClickListener(v -> { switchDrawerTab(2); loadSkillsFiles(); });
+        mTabAgentTask.setOnClickListener(v -> switchDrawerTab(3));
+        mTabUploads  .setOnClickListener(v -> { switchDrawerTab(4); loadUploadFiles(); });
+
+        // ── AgentServer 任务面板（列表形式）─────────────────────────────────
+        mAgentTaskStore     = new AgentTaskStore(requireContext());
+        mAgentTaskEmptyHint = view.findViewById(R.id.agent_task_empty_hint);
+        mAgentTaskRecycler  = view.findViewById(R.id.agent_task_recycler);
+        mAgentTasks.clear();
+        mAgentTasks.addAll(mAgentTaskStore.loadAll());
+        mAgentTaskAdapter = new AgentTaskListAdapter(mAgentTasks,
+            new AgentTaskListAdapter.Listener() {
+                @Override public void onTap(AgentTask task) {
+                    if (act() != null) {
+                        mDrawerLayout.closeDrawers();
+                        act().showAgentTaskDetailMode(task.id);
+                    }
+                }
+                @Override public void onLongPress(AgentTask task) {
+                    if (getContext() == null) return;
+                    new AlertDialog.Builder(getContext())
+                        .setTitle("删除该任务？")
+                        .setMessage(task.previewLine().isEmpty() ? "（空任务）" : task.previewLine())
+                        .setPositiveButton("删除", (d, w) -> {
+                            mAgentTaskStore.delete(task.id);
+                            mAgentTasks.remove(task);
+                            mAgentTaskAdapter.notifyDataSetChanged();
+                            mAgentTaskEmptyHint.setVisibility(
+                                mAgentTasks.isEmpty() ? View.VISIBLE : View.GONE);
+                        })
+                        .setNegativeButton("取消", null).show();
+                }
+            });
+        mAgentTaskRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        mAgentTaskRecycler.setAdapter(mAgentTaskAdapter);
+        mAgentTaskEmptyHint.setVisibility(mAgentTasks.isEmpty() ? View.VISIBLE : View.GONE);
+
+        view.findViewById(R.id.btn_agent_task_clear).setOnClickListener(v -> {
+            new AlertDialog.Builder(requireContext())
+                .setTitle("清空所有任务记录？")
+                .setPositiveButton("清空", (d, w) -> {
+                    mAgentTaskStore.clear();
+                    mAgentTasks.clear();
+                    mAgentTaskAdapter.notifyDataSetChanged();
+                    mAgentTaskEmptyHint.setVisibility(View.VISIBLE);
+                })
+                .setNegativeButton("取消", null).show();
+        });
+
+        // Pipe watcher：用持久化 offset 续读，否则只回放末尾一小段
+        File pipeFile = new File(AGENT_PIPE_FILE);
+        SharedPreferences pipePrefs = requireContext()
+            .getSharedPreferences(PREF_AGENT_PIPE, Context.MODE_PRIVATE);
+        boolean hasSavedOffset = pipePrefs.contains(KEY_AGENT_PIPE_OFFSET);
+        long savedOffset = pipePrefs.getLong(KEY_AGENT_PIPE_OFFSET, 0);
+        if (!hasSavedOffset && pipeFile.exists()) {
+            savedOffset = Math.max(0, pipeFile.length() - 200_000);
+        }
+        mAgentPipeOffset = pipeFile.exists() ? Math.min(savedOffset, pipeFile.length()) : 0;
+        processNewPipeLines();
+        startAgentPipeWatcher();
+
+        // ── 上传文件面板 ──────────────────────────────────────────────────
+        mUploadStore     = new UploadStore(requireContext());
+        mUploadRecycler  = view.findViewById(R.id.upload_recycler);
+        mUploadEmptyHint = view.findViewById(R.id.upload_empty_hint);
+        setupUploadRecycler();
+        view.findViewById(R.id.btn_uploads_clear_all).setOnClickListener(v -> clearAllUploads());
 
         // ── 历史会话抽屉 ──────────────────────────────────────────────────
         mSessionStore   = new SessionStore(requireContext());
@@ -198,6 +301,11 @@ public class HomeFragment extends Fragment {
                             mSessionAdapter.notifyDataSetChanged();
                             emptyHint.setVisibility(
                                 mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
+                            // 同步删除该对话关联的上传文件
+                            List<String> toDelete = mUploadStore.deleteSession(entry.id);
+                            if (!toDelete.isEmpty()) {
+                                new Thread(() -> deleteUbuntuFiles(toDelete)).start();
+                            }
                         })
                         .setNegativeButton("取消", null)
                         .show();
@@ -354,6 +462,12 @@ public class HomeFragment extends Fragment {
         stopStatusPolling();
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        stopAgentPipeWatcher();
+    }
+
     // =========================================================================
     // 发送 — ProcessBuilder 独立进程
     // =========================================================================
@@ -430,9 +544,12 @@ public class HomeFragment extends Fragment {
 
                 // 2>/dev/null：claude 的 verbose stderr（系统提示回显等）不展示给用户；
                 // 真正的错误通过 JSONL type=result is_error 字段捕获。
+                // CLAUDE_DIRECT=1：告知 claude 包装脚本这是 HomeFragment 的直接调用，
+                // 不写入 agentserver pipe 文件（避免与 AgentServer 任务混淆）。
                 String claudeCmd = "printf '%s' '" + escaped + "'"
                         + " | ANTHROPIC_API_KEY='" + escapedKey + "'"
                         + (finalBaseUrl.isEmpty() ? "" : " ANTHROPIC_BASE_URL='" + escapedUrl + "'")
+                        + " CLAUDE_DIRECT=1"
                         + " claude -p --output-format stream-json --verbose --dangerously-skip-permissions"
                         + sessionFlag + " 2>/dev/null";
 
@@ -541,6 +658,7 @@ public class HomeFragment extends Fragment {
                 // 更新当前 session ID 并刷新抽屉
                 if (!finalSessId.isEmpty() && !finalSessId.equals(mCurrentSessionId)) {
                     mCurrentSessionId = finalSessId;
+                    mUploadStore.commitPending(finalSessId);
                     refreshSessionDrawer();
                 }
                 updateStatus("● 就绪", 0xFF2E7D32);
@@ -651,6 +769,9 @@ public class HomeFragment extends Fragment {
                 }
 
                 final String finalProotPath = prootPath.trim();
+                // 追踪上传文件：若已有 session 写入该 session 桶，否则写入 pending 桶
+                String trackSid = mCurrentSessionId != null ? mCurrentSessionId : UploadStore.PENDING;
+                mUploadStore.addFile(trackSid, finalName);
                 mHandler.post(() -> {
                     mAttachmentPath = finalProotPath; // proot-visible path passed to Claude Code
                     mAttachmentName = finalName;
@@ -979,12 +1100,379 @@ public class HomeFragment extends Fragment {
         int inactiveColor = 0xFF888888;
         String activeBg   = "#FFFFFF";
         String inactiveBg = "#F0F0F0";
-        TextView[] tabs = { mTabHistory, mTabMemory, mTabSkills };
+        TextView[] tabs = { mTabHistory, mTabMemory, mTabSkills, mTabAgentTask, mTabUploads };
         for (int i = 0; i < tabs.length; i++) {
             tabs[i].setTextColor(i == index ? activeColor : inactiveColor);
             tabs[i].setBackgroundColor(android.graphics.Color.parseColor(
                 i == index ? activeBg : inactiveBg));
         }
+    }
+
+    // =========================================================================
+    // 上传文件面板
+    // =========================================================================
+
+    private void setupUploadRecycler() {
+        mUploadAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override
+            public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                View v = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_upload_file, parent, false);
+                return new RecyclerView.ViewHolder(v) {};
+            }
+            @Override
+            public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                UploadItem item = mUploadItems.get(position);
+                TextView badge   = holder.itemView.findViewById(R.id.upload_ext_badge);
+                TextView nameTV  = holder.itemView.findViewById(R.id.upload_filename);
+                TextView labelTV = holder.itemView.findViewById(R.id.upload_session_label);
+
+                // 扩展名徽章
+                int dot = item.filename.lastIndexOf('.');
+                String ext = (dot >= 0 && dot < item.filename.length() - 1)
+                    ? item.filename.substring(dot + 1).toUpperCase(Locale.US) : "FILE";
+                if (ext.length() > 4) ext = ext.substring(0, 4);
+                badge.setText(ext);
+                badge.setBackgroundColor(extColor(ext));
+
+                nameTV.setText(item.filename);
+                labelTV.setText(item.sessionLabel);
+
+                holder.itemView.setOnLongClickListener(v -> {
+                    if (getContext() == null) return true;
+                    new AlertDialog.Builder(getContext())
+                        .setTitle("删除上传文件？")
+                        .setMessage(item.filename)
+                        .setPositiveButton("删除", (d, w) -> {
+                            mUploadStore.deleteFile(item.sessionId, item.filename);
+                            new Thread(() -> deleteUbuntuFiles(
+                                java.util.Collections.singletonList(item.filename))).start();
+                            mUploadItems.remove(item);
+                            mUploadAdapter.notifyDataSetChanged();
+                            mUploadEmptyHint.setVisibility(
+                                mUploadItems.isEmpty() ? View.VISIBLE : View.GONE);
+                        })
+                        .setNegativeButton("取消", null).show();
+                    return true;
+                });
+            }
+            @Override public int getItemCount() { return mUploadItems.size(); }
+        };
+        mUploadRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        mUploadRecycler.setAdapter(mUploadAdapter);
+    }
+
+    private int extColor(String ext) {
+        switch (ext) {
+            case "JPG": case "JPEG": case "PNG": case "GIF": case "WEBP":
+                return 0xFF4CAF50;
+            case "PDF":
+                return 0xFFF44336;
+            case "ZIP": case "TAR": case "GZ": case "7Z": case "RAR":
+                return 0xFFFF9800;
+            case "TXT": case "MD": case "PY": case "JS": case "JAVA":
+            case "KT": case "GO": case "TS": case "CSV": case "JSON":
+            case "XML": case "HTML": case "RS": case "CPP": case "C": case "H":
+                return 0xFF2196F3;
+            default:
+                return 0xFF9E9E9E;
+        }
+    }
+
+    private void loadUploadFiles() {
+        Map<String, List<String>> all = mUploadStore.getAll();
+        List<SessionStore.Entry> sessions = mSessionStore.loadAll();
+        Map<String, String> sessionLabels = new java.util.HashMap<>();
+        for (SessionStore.Entry e : sessions) sessionLabels.put(e.id, e.formatTime());
+
+        mUploadItems.clear();
+        for (Map.Entry<String, List<String>> e : all.entrySet()) {
+            String sid = e.getKey();
+            String label = UploadStore.PENDING.equals(sid)
+                ? "待关联" : sessionLabels.getOrDefault(sid, "已删除对话");
+            for (String filename : e.getValue()) {
+                mUploadItems.add(new UploadItem(sid, filename, label));
+            }
+        }
+        mUploadAdapter.notifyDataSetChanged();
+        mUploadEmptyHint.setVisibility(mUploadItems.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    private void deleteUbuntuFiles(List<String> names) {
+        if (names.isEmpty()) return;
+        StringBuilder sb = new StringBuilder("rm -f");
+        for (String n : names) {
+            String safe = n.replace("'", "'\\''");
+            sb.append(" ~/uploads/'").append(safe).append("'");
+        }
+        try {
+            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+                "--user", "claude", "--", "sh", "-c", sb.toString());
+            setupEnv(pb.environment(), "", "");
+            pb.start().waitFor();
+        } catch (Exception ignored) {}
+    }
+
+    private void clearAllUploads() {
+        if (getContext() == null) return;
+        new AlertDialog.Builder(getContext())
+            .setTitle("清空全部上传文件？")
+            .setMessage("将删除 Ubuntu ~/uploads/ 内所有文件，无法恢复。")
+            .setPositiveButton("清空", (d, w) -> {
+                List<String> allFiles = mUploadStore.clearAll();
+                new Thread(() -> deleteUbuntuFiles(allFiles)).start();
+                mUploadItems.clear();
+                mUploadAdapter.notifyDataSetChanged();
+                mUploadEmptyHint.setVisibility(View.VISIBLE);
+            })
+            .setNegativeButton("取消", null).show();
+    }
+
+    // =========================================================================
+    // AgentServer 任务面板 — pipe 文件监听
+    // =========================================================================
+
+    /** 启动后台轮询线程，每 600ms 读取 pipe 文件新增行并渲染到第 4 面板。 */
+    private void startAgentPipeWatcher() {
+        if (mAgentPipeWatcher != null && mAgentPipeWatcher.isAlive()) return;
+        mAgentPipeWatcher = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try { Thread.sleep(600); } catch (InterruptedException e) { break; }
+                processNewPipeLines();
+            }
+        }, "agent-pipe-watcher");
+        mAgentPipeWatcher.setDaemon(true);
+        mAgentPipeWatcher.start();
+    }
+
+    /** 停止 pipe watcher（Fragment 销毁时调用）。 */
+    private void stopAgentPipeWatcher() {
+        if (mAgentPipeWatcher != null) {
+            mAgentPipeWatcher.interrupt();
+            mAgentPipeWatcher = null;
+        }
+    }
+
+    /** 读取 pipe 文件自上次 offset 以来的新行，逐行解析。 */
+    private void processNewPipeLines() {
+        File f = new File(AGENT_PIPE_FILE);
+        if (!f.exists() || f.length() <= mAgentPipeOffset) return;
+        long start = mAgentPipeOffset;
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+            raf.seek(mAgentPipeOffset);
+            String line;
+            while ((line = raf.readLine()) != null) {
+                mAgentPipeOffset = raf.getFilePointer();
+                if (line.trim().isEmpty()) continue;
+                handleAgentPipeLine(line);
+            }
+        } catch (Exception ignored) {}
+        if (mAgentPipeOffset != start && getContext() != null) {
+            getContext()
+                .getSharedPreferences(PREF_AGENT_PIPE, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_AGENT_PIPE_OFFSET, mAgentPipeOffset)
+                .apply();
+        }
+    }
+
+    /** 解析单行 pipe 内容：累积事件到当前 active task，并持久化。 */
+    private void handleAgentPipeLine(String line) {
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject(line);
+            String type = obj.optString("type");
+            switch (type) {
+                case "as_stream_session_start":
+                    // 新 claude 实例启动：标记上一个 active task 完成
+                    mHandler.post(this::finishActiveTaskIfAny);
+                    break;
+                case "as_stream_in":
+                    // wrapper 捕获到的 stdin 行：可能是上游下发的 user prompt
+                    handleStreamInLine(obj);
+                    break;
+                case "user":
+                    // claude 自身 stdout 的 user 事件：通常是 tool_result，记录为 system 消息
+                    handleClaudeUserEvent(obj);
+                    break;
+                case "assistant":
+                    handleAssistantEvent(obj);
+                    break;
+                case "result":
+                    mHandler.post(this::finishActiveTaskIfAny);
+                    break;
+                default:
+                    // system init / control_response / 其他：忽略
+                    break;
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /** as_stream_in：base64 解码 → 解析内层 JSON，若是 user prompt 则开新任务。 */
+    private void handleStreamInLine(org.json.JSONObject envelope) {
+        try {
+            String b64 = envelope.optString("b64", "");
+            if (b64.isEmpty()) return;
+            byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+            String inner = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).trim();
+            if (inner.isEmpty()) return;
+            org.json.JSONObject innerObj = new org.json.JSONObject(inner);
+            // 上游往 stdin 写的是 stream-json 格式：{"type":"user","message":{...}}
+            if (!"user".equals(innerObj.optString("type"))) return;
+            String prompt = extractStreamUserPrompt(innerObj);
+            if (prompt == null || prompt.isEmpty()) return;
+            final String p = prompt;
+            mHandler.post(() -> startNewAgentTask(p));
+        } catch (Exception ignored) {}
+    }
+
+    /** Claude 自身的 user 事件（多为 tool_result），追加为 SYSTEM 消息到当前任务。 */
+    private void handleClaudeUserEvent(org.json.JSONObject obj) {
+        try {
+            org.json.JSONObject msg = obj.optJSONObject("message");
+            if (msg == null) return;
+            Object content = msg.opt("content");
+            String summary = summarizeToolResult(content);
+            if (summary == null) return;
+            final String s = summary;
+            mHandler.post(() -> appendToActiveTask(ChatMessage.system("📥 工具返回: " + s)));
+        } catch (Exception ignored) {}
+    }
+
+    /** Assistant 事件：text/thinking 追加为 ASSISTANT 消息；tool_use 追加为 SYSTEM 消息。 */
+    private void handleAssistantEvent(org.json.JSONObject obj) {
+        try {
+            org.json.JSONObject msg = obj.optJSONObject("message");
+            if (msg == null) return;
+            org.json.JSONArray content = msg.optJSONArray("content");
+            if (content == null) return;
+            final List<ChatMessage> toAppend = new ArrayList<>();
+            for (int i = 0; i < content.length(); i++) {
+                org.json.JSONObject item = content.optJSONObject(i);
+                if (item == null) continue;
+                String itemType = item.optString("type");
+                if ("text".equals(itemType)) {
+                    String txt = item.optString("text", "").trim();
+                    if (!txt.isEmpty()) toAppend.add(ChatMessage.assistant(txt));
+                } else if ("thinking".equals(itemType)) {
+                    String th = item.optString("thinking", "").trim();
+                    if (!th.isEmpty()) {
+                        ChatMessage m = ChatMessage.assistant("");
+                        m.thinking = th;
+                        m.thinkingCollapsed = true;
+                        toAppend.add(m);
+                    }
+                } else if ("tool_use".equals(itemType)) {
+                    String name = item.optString("name", "?");
+                    toAppend.add(ChatMessage.system("📞 调用工具: " + name));
+                }
+            }
+            if (toAppend.isEmpty()) return;
+            mHandler.post(() -> {
+                for (ChatMessage m : toAppend) appendToActiveTask(m);
+            });
+        } catch (Exception ignored) {}
+    }
+
+    /** 提取流式 user 消息中的纯文本 prompt（不含 tool_result）。 */
+    private String extractStreamUserPrompt(org.json.JSONObject userEvent) {
+        try {
+            org.json.JSONObject msg = userEvent.optJSONObject("message");
+            if (msg == null) return null;
+            Object content = msg.opt("content");
+            if (content instanceof String) {
+                return ((String) content).trim();
+            }
+            if (content instanceof org.json.JSONArray) {
+                org.json.JSONArray arr = (org.json.JSONArray) content;
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < arr.length(); i++) {
+                    org.json.JSONObject item = arr.optJSONObject(i);
+                    if (item == null) continue;
+                    String itemType = item.optString("type");
+                    if ("tool_result".equals(itemType)) return null;
+                    if ("text".equals(itemType)) {
+                        if (sb.length() > 0) sb.append("\n");
+                        sb.append(item.optString("text", ""));
+                    }
+                }
+                String s = sb.toString().trim();
+                return s.isEmpty() ? null : s;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /** 把 tool_result 的 content 摘要成短字符串（最多 200 字）。 */
+    private String summarizeToolResult(Object content) {
+        try {
+            String raw;
+            if (content instanceof String) {
+                raw = (String) content;
+            } else if (content instanceof org.json.JSONArray) {
+                StringBuilder sb = new StringBuilder();
+                org.json.JSONArray arr = (org.json.JSONArray) content;
+                for (int i = 0; i < arr.length(); i++) {
+                    org.json.JSONObject item = arr.optJSONObject(i);
+                    if (item == null) continue;
+                    String t = item.optString("type");
+                    if ("text".equals(t)) {
+                        if (sb.length() > 0) sb.append("\n");
+                        sb.append(item.optString("text", ""));
+                    } else if ("image".equals(t)) {
+                        if (sb.length() > 0) sb.append("\n");
+                        sb.append("[图片]");
+                    }
+                }
+                raw = sb.toString();
+            } else {
+                return null;
+            }
+            raw = raw.trim();
+            if (raw.isEmpty()) return null;
+            if (raw.length() > 200) raw = raw.substring(0, 197) + "…";
+            return raw;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 创建新任务，写入 store，刷新侧栏。 */
+    private void startNewAgentTask(String prompt) {
+        // 上一个未完成的任务标记完成
+        finishActiveTaskIfAny();
+        AgentTask t = new AgentTask();
+        t.prompt = prompt;
+        mActiveAgentTask = t;
+        mAgentTaskStore.upsert(t);
+        // 头插到侧栏列表
+        mAgentTasks.add(0, t);
+        mAgentTaskAdapter.notifyDataSetChanged();
+        mAgentTaskEmptyHint.setVisibility(View.GONE);
+        FloatingStatusService.updateStatus("● 执行任务", 0xFFF57C00,
+            prompt.length() > 40 ? prompt.substring(0, 40) + "…" : prompt);
+    }
+
+    /** 把消息追加到当前 active task（无 active 则忽略），并持久化。 */
+    private void appendToActiveTask(ChatMessage m) {
+        if (mActiveAgentTask == null) return;
+        mActiveAgentTask.messages.add(m);
+        mAgentTaskStore.upsert(mActiveAgentTask);
+    }
+
+    /** 把 active task 标记为 COMPLETED 并持久化；无 active 则空操作。 */
+    private void finishActiveTaskIfAny() {
+        if (mActiveAgentTask == null) return;
+        mActiveAgentTask.status = AgentTask.Status.COMPLETED;
+        mAgentTaskStore.upsert(mActiveAgentTask);
+        // 刷新侧栏列表项的状态徽章
+        for (int i = 0; i < mAgentTasks.size(); i++) {
+            if (mAgentTasks.get(i).id.equals(mActiveAgentTask.id)) {
+                mAgentTaskAdapter.notifyItemChanged(i);
+                break;
+            }
+        }
+        mActiveAgentTask = null;
+        FloatingStatusService.updateStatus("● 就绪", 0xFF388E3C, "");
     }
 
     // =========================================================================

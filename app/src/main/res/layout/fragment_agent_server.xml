@@ -57,132 +57,132 @@
                 android:id="@+id/agentserver_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="正在检查 AgentServer 状态..."
-                android:textColor="#555555"
-                android:textSize="13sp"
+                android:layout_marginBottom="14dp"
                 android:background="#F8F8F8"
                 android:padding="10dp"
-                android:layout_marginBottom="14dp" />
+                android:text="正在检查 AgentServer 状态..."
+                android:textColor="#555555"
+                android:textSize="13sp" />
 
             <!-- 服务器地址 -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
                 android:text="服务器地址"
                 android:textColor="#212121"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="4dp" />
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/agentserver_url"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="https://your-server"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA"
+                android:layout_marginBottom="12dp"
                 android:background="#EEEEEE"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
+                android:hint="https://your-server"
                 android:inputType="textUri"
+                android:paddingStart="12dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="10dp"
                 android:singleLine="true"
-                android:layout_marginBottom="12dp" />
+                android:textColor="#212121"
+                android:textColorHint="#AAAAAA" />
 
             <!-- 注册码 -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
                 android:text="沙盒 ID（可选）"
                 android:textColor="#212121"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="4dp" />
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/agentserver_code"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="留空自动复用上次沙盒，或填入指定沙盒 ID"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA"
+                android:layout_marginBottom="12dp"
                 android:background="#EEEEEE"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
+                android:hint="留空自动复用上次沙盒，或填入指定沙盒 ID"
                 android:inputType="text"
+                android:paddingStart="12dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="10dp"
                 android:singleLine="true"
-                android:layout_marginBottom="12dp" />
+                android:textColor="#212121"
+                android:textColorHint="#AAAAAA" />
 
             <!-- 设备名称 -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
                 android:text="设备名称（可选）"
                 android:textColor="#212121"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="4dp" />
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/agentserver_device_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="留空则使用主机名，显示在 Web UI 沙盒列表"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA"
+                android:layout_marginBottom="6dp"
                 android:background="#EEEEEE"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
+                android:hint="留空则使用主机名，显示在 Web UI 沙盒列表"
                 android:inputType="text"
+                android:paddingStart="12dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="10dp"
                 android:singleLine="true"
-                android:layout_marginBottom="6dp" />
+                android:textColor="#212121"
+                android:textColorHint="#AAAAAA" />
 
             <!-- 提示文字 -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
                 android:text="连接后手机出现为 Web UI 的「本地沙盒」，浏览器可直接使用手机 Claude Code"
                 android:textColor="#888888"
-                android:textSize="12sp"
-                android:layout_marginBottom="12dp" />
+                android:textSize="12sp" />
 
             <!-- 连接 / 断开连接 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="8dp"
+                android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_agentserver_connect"
                     android:layout_width="0dp"
                     android:layout_height="36dp"
-                    android:layout_weight="1"
                     android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#1976D2"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="连接"
                     android:textColor="@android:color/white"
-                    android:backgroundTint="#1976D2"
-                    android:textSize="13sp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp" />
+                    android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_agentserver_stop"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="36dp"
-                    android:layout_weight="1"
                     android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="断开连接"
                     android:textColor="#F57C00"
                     android:textSize="13sp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
                     app:strokeColor="#F57C00" />
 
             </LinearLayout>
@@ -193,35 +193,36 @@
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="36dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="刷新状态"
                 android:textColor="#555555"
                 android:textSize="13sp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
                 app:strokeColor="#BDBDBD" />
 
         </LinearLayout>
 
     </ScrollView>
 
-    <!-- 执行日志（固定高度） -->
+    <!-- 执行日志 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="220dp"
+        android:layout_height="200dp"
         android:orientation="vertical"
         android:background="#F5F5F5">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingStart="12dp"
-            android:paddingEnd="8dp"
             android:paddingTop="6dp"
+            android:paddingEnd="8dp"
             android:paddingBottom="2dp">
 
             <TextView
+                android:id="@+id/agentserver_log_label"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -230,17 +231,30 @@
                 android:textSize="11sp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_agentserver_monitor"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="4dp"
+                android:text="实时监控"
+                android:textColor="#1976D2"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_agentserver_clear_log"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="24dp"
-                android:text="清空"
-                android:textColor="#AAAAAA"
-                android:textSize="11sp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="0dp" />
+                android:paddingStart="4dp"
+                android:paddingEnd="0dp"
+                android:text="清空"
+                android:textColor="#AAAAAA"
+                android:textSize="11sp" />
 
         </LinearLayout>
 

@@ -196,6 +196,9 @@ public class AutoClaudeManager {
         s.append("            printf '\\n# Claude Code\\nexport ANTHROPIC_API_KEY=\"%s\"\\n' \"$_key\" >> \"$_chome/.bashrc\"\n");
         s.append("            [ -n \"$_base\" ] && printf 'export ANTHROPIC_BASE_URL=\"%s\"\\n' \"$_base\" >> \"$_chome/.bashrc\"\n");
         s.append("        }\n");
+        // 确保 ~/.local/bin 在 PATH 前面，便于使用 wrapper 拦截 AgentServer 任务
+        s.append("        grep -qF 'export PATH=\"$HOME/.local/bin:$PATH\"' \"$_chome/.bashrc\" 2>/dev/null || ");
+        s.append("printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' >> \"$_chome/.bashrc\"\n");
         s.append("        export ANTHROPIC_API_KEY=\"$_key\"\n");
         s.append("        [ -n \"$_base\" ] && export ANTHROPIC_BASE_URL=\"$_base\"\n\n");
 

@@ -379,6 +379,28 @@
                 android:textColor="#888888"
                 android:background="#F0F0F0" />
 
+            <TextView
+                android:id="@+id/tab_agent_task"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="任务"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:background="#F0F0F0" />
+
+            <TextView
+                android:id="@+id/tab_uploads"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="上传"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:background="#F0F0F0" />
+
         </LinearLayout>
 
         <!-- 面板切换器 -->
@@ -522,6 +544,116 @@
                     android:gravity="center"
                     android:padding="24dp"
                     android:visibility="gone" />
+
+            </LinearLayout>
+
+            <!-- ── 面板 3：AgentServer 任务 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="AgentServer 任务"
+                        android:textSize="13sp"
+                        android:textColor="#555555" />
+
+                    <TextView
+                        android:id="@+id/btn_agent_task_clear"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="清空"
+                        android:textSize="12sp"
+                        android:textColor="#AAAAAA"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/agent_task_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/agent_task_empty_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="尚无任务记录\nAgentServer 下发任务后自动显示"
+                    android:textColor="#AAAAAA"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:visibility="visible" />
+
+            </LinearLayout>
+
+            <!-- ── 面板 4：上传文件 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="上传文件"
+                        android:textSize="13sp"
+                        android:textColor="#555555" />
+
+                    <TextView
+                        android:id="@+id/btn_uploads_clear_all"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="清空全部"
+                        android:textSize="12sp"
+                        android:textColor="#AAAAAA"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/upload_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/upload_empty_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="暂无上传文件"
+                    android:textColor="#AAAAAA"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:visibility="visible" />
 
             </LinearLayout>
 

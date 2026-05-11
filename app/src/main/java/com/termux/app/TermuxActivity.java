@@ -1002,7 +1002,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** 切换到简化 UI（主页）模式：隐藏终端，显示 HomeFragment。 */
-    private void showHomeMode() {
+    public void showHomeMode() {
         DrawerLayout drawer = getDrawer();
         ViewPager toolbar = getTerminalToolbarViewPager();
         View container = findViewById(R.id.home_fragment_container);
@@ -1017,16 +1017,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
         androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
-        androidx.fragment.app.Fragment homeF  = fm.findFragmentByTag("home");
-        androidx.fragment.app.Fragment apiF   = fm.findFragmentByTag("apikey");
-        androidx.fragment.app.Fragment agentF = fm.findFragmentByTag("agentserver");
+        androidx.fragment.app.Fragment homeF   = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF    = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF  = fm.findFragmentByTag("agentserver");
+        androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (homeF == null) {
             ft.add(R.id.home_fragment_container, new HomeFragment(), "home");
         } else {
             ft.show(homeF);
         }
-        if (apiF   != null) ft.hide(apiF);
-        if (agentF != null) ft.hide(agentF);
+        if (apiF    != null) ft.hide(apiF);
+        if (agentF  != null) ft.hide(agentF);
+        if (detailF != null) ft.remove(detailF);
         ft.commit();
     }
 
@@ -1085,6 +1087,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (homeF != null) ft.hide(homeF);
         if (apiF  != null) ft.hide(apiF);
+        ft.commit();
+    }
+
+    /** 切换到 AgentServer 任务详情页（按 task id 加载），通常从 HomeFragment 任务列表点击进入。 */
+    public void showAgentTaskDetailMode(String taskId) {
+        DrawerLayout drawer = getDrawer();
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        View container = findViewById(R.id.home_fragment_container);
+        if (drawer == null || container == null || taskId == null) return;
+
+        if (drawer.isDrawerOpen(android.view.Gravity.START))
+            drawer.closeDrawer(android.view.Gravity.START);
+
+        drawer.setVisibility(View.GONE);
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
+        container.setVisibility(View.VISIBLE);
+
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF   = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment apiF    = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF  = fm.findFragmentByTag("agentserver");
+        androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
+        if (homeF   != null) ft.hide(homeF);
+        if (apiF    != null) ft.hide(apiF);
+        if (agentF  != null) ft.hide(agentF);
+        if (detailF != null) ft.remove(detailF);
+        ft.add(R.id.home_fragment_container,
+            AgentTaskDetailFragment.newInstance(taskId), "agent_task_detail");
         ft.commit();
     }
 

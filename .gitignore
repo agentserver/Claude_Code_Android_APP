@@ -10,6 +10,14 @@ release/
 .externalNativeBuild
 .cxx
 *.zip
+*.tgz
+*.tar.xz
+*.tar.zst
+
+# Local large assets / helpers
+ubuntu_*.tar.*
+ubuntu-claude-*.tar.*
+claude-wrapper-fix.sh
 
 # Local configuration file (sdk path, etc)
 local.properties

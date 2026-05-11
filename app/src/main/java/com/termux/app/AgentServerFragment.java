@@ -42,7 +42,9 @@ public class AgentServerFragment extends Fragment {
     private EditText  mCodeEdit;
     private EditText  mDeviceNameEdit;
     private TextView  mLogText;
+    private TextView  mLogLabel;
     private ScrollView mLogScroll;
+    private boolean   mMonitoring = false;
 
     private Thread mActiveThread;
     private String mLastSandboxId = "";  // 上次成功连接的沙盒 ID，用于 --resume
@@ -66,11 +68,13 @@ public class AgentServerFragment extends Fragment {
         mCodeEdit      = v.findViewById(R.id.agentserver_code);
         mDeviceNameEdit = v.findViewById(R.id.agentserver_device_name);
         mLogText       = v.findViewById(R.id.agentserver_log);
+        mLogLabel      = v.findViewById(R.id.agentserver_log_label);
         mLogScroll     = v.findViewById(R.id.agentserver_log_scroll);
 
         v.findViewById(R.id.btn_agentserver_connect)   .setOnClickListener(b -> doConnect());
         v.findViewById(R.id.btn_agentserver_stop)      .setOnClickListener(b -> doStop());
         v.findViewById(R.id.btn_agentserver_refresh)   .setOnClickListener(b -> checkStatus());
+        v.findViewById(R.id.btn_agentserver_monitor)   .setOnClickListener(b -> doMonitor());
         v.findViewById(R.id.btn_agentserver_clear_log) .setOnClickListener(b -> clearLog());
 
         loadPrefs();
@@ -174,8 +178,11 @@ public class AgentServerFragment extends Fragment {
             "> '" + logFile + "'\n" +          // 清空旧日志，避免历史内容干扰状态检测
             "echo '[*] 正在启动 AgentServer...'\n" +
             // bash -c 包裹：显式传入 ANTHROPIC_API_KEY（来自 ApiKeyStore）+ 兜底 source .bashrc
+            // 说明：
+            // - 这里用绝对路径启动 /usr/local/bin/agentserver，避免 PATH 不完整导致 “not found”
+            // - 同时把 ~/.local/bin 放到 PATH 前面，确保 AgentServer 触发的 claude 调用走 wrapper（写 pipe）
             "nohup '" + pdBin + "' login --user " + PROOT_USER + " ubuntu -- bash -c" +
-            " \". /home/claude/.bashrc 2>/dev/null; " + finalEnvPrefix + "exec agentserver " + agentArgs + "\"" +
+            " \". /home/claude/.bashrc 2>/dev/null; export PATH=/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; " + finalEnvPrefix + "exec /usr/local/bin/agentserver " + agentArgs + "\"" +
             " >> '" + logFile + "' 2>&1 &\n" +
             "AS_PID=$!\n" +
             "echo '[*] 等待启动（5 秒）...'\n" +
@@ -224,6 +231,81 @@ public class AgentServerFragment extends Fragment {
         });
     }
 
+    /**
+     * 实时监控：快照两个日志文件最近内容，然后 tail -f 跟踪新增行。
+     * - agentserver-agent.log：agentserver 收到的任务描述 + Claude Code 的完整输出
+     * - mcp-audit.log：MCP 工具调用审计（Claude 对手机做了什么操作）
+     * 点击任意其他按钮（或 onDestroyView）会自动停止跟踪。
+     */
+    private void doMonitor() {
+        mMonitoring = true;
+        String prefix = System.getenv("PREFIX");
+        if (prefix == null || prefix.isEmpty()) prefix = "/data/data/com.termux/files/usr";
+        String home     = prefix + "/../home";
+        String agentLog = home + "/agentserver-agent.log";
+        String mcpLog   = home + "/mcp-audit.log";
+
+        String script =
+            "echo '════════════════════════════════════════'\n" +
+            "echo '  实时任务监控（新行自动追加）'\n" +
+            "echo '  点击「刷新状态」/「连接」等按钮可停止'\n" +
+            "echo '════════════════════════════════════════'\n" +
+            "echo ''\n" +
+            "echo '── AgentServer 任务日志（最近 40 行）──'\n" +
+            "tail -n 40 '" + agentLog + "' 2>/dev/null || echo '（暂无日志）'\n" +
+            "echo ''\n" +
+            "echo '── MCP 工具调用记录（最近 40 行）──'\n" +
+            "tail -n 40 '" + mcpLog + "' 2>/dev/null || echo '（暂无调用记录）'\n" +
+            "echo ''\n" +
+            "echo '── 实时跟踪中 ──'\n" +
+            // tail -f on two files: prints "==> filename <==" header when source switches
+            "tail -f -n 0 '" + agentLog + "' '" + mcpLog + "' 2>/dev/null\n";
+
+        // 覆盖 runScript 默认行为：监控时不修改状态徽章
+        cancelActiveThread();
+        clearLog();
+        if (mLogLabel != null) mLogLabel.setText("实时监控中…");
+
+        String bash = prefix + "/bin/bash";
+        String sysPath = System.getenv("PATH");
+        if (sysPath == null) sysPath = "";
+        final String finalPath   = prefix + "/bin:" + prefix + "/bin/applets:" + sysPath;
+        final String finalPrefix = prefix;
+        final String finalScript = script;
+
+        mActiveThread = new Thread(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(bash, "-c", finalScript);
+                pb.redirectErrorStream(true);
+                java.util.Map<String, String> env = pb.environment();
+                env.putAll(System.getenv());
+                env.put("PATH",   finalPath);
+                env.put("PREFIX", finalPrefix);
+                env.put("HOME",   finalPrefix + "/../home");
+                Process p = pb.start();
+
+                java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream(),
+                        java.nio.charset.StandardCharsets.UTF_8));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (Thread.currentThread().isInterrupted()) { p.destroy(); break; }
+                    final String l = line;
+                    post(() -> appendLog(l + "\n"));
+                }
+                p.waitFor();
+            } catch (InterruptedException ignored) {
+            } catch (Exception e) {
+                post(() -> appendLog("[!] 监控出错：" + e.getMessage() + "\n"));
+            } finally {
+                mMonitoring = false;
+                post(() -> { if (mLogLabel != null) mLogLabel.setText("执行日志"); });
+            }
+        }, "agentserver-monitor");
+        mActiveThread.setDaemon(true);
+        mActiveThread.start();
+    }
+
     /** 停止后台运行的 Agent（在 Termux 层 kill，不进入 proot）。 */
     private void doStop() {
         mConnected = false;
@@ -240,6 +322,8 @@ public class AgentServerFragment extends Fragment {
 
     private void runScript(String bashScript, String label, @Nullable Consumer<String> lineCallback) {
         cancelActiveThread();
+        mMonitoring = false;
+        if (mLogLabel != null) mLogLabel.setText("执行日志");
         clearLog();
         appendLog("▶ " + label + "\n");
         setStatus("● 运行中", "#F57C00");
@@ -302,9 +386,25 @@ public class AgentServerFragment extends Fragment {
     private void updateStatusFromLog(int exitCode) {
         if (exitCode != 0) {
             String log = mLogText.getText().toString();
-            if (log.contains("未安装") || log.contains("not installed") || log.contains("not found")) {
+            boolean missingBinary =
+                log.contains("未安装") ||
+                log.contains("not installed") ||
+                log.contains("command not found") ||
+                log.contains("No such file or directory") ||
+                log.contains("agentserver: not found") ||
+                log.contains("proot-distro: not found");
+
+            boolean badServer =
+                log.contains("404") ||
+                log.contains("page not found") ||
+                log.contains("Not Found");
+
+            if (missingBinary) {
                 setStatus("● 未安装", "#888888");
                 setInfo("AgentServer 未安装，请重启应用等待自动安装");
+            } else if (badServer) {
+                setStatus("● 失败", "#E53935");
+                setInfo("连接失败：服务器地址可能不对（404 Not Found），请检查 URL 是否为 agentserver 的根地址");
             } else if (log.contains("未就绪") || log.contains("proot-distro 未找到")) {
                 setStatus("● 环境未就绪", "#888888");
                 setInfo("Ubuntu 环境尚未初始化，请先切换到终端 Tab");
