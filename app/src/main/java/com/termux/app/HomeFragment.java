@@ -236,6 +236,7 @@ public class HomeFragment extends Fragment {
                         .setMessage(task.previewLine().isEmpty() ? "（空任务）" : task.previewLine())
                         .setPositiveButton("删除", (d, w) -> {
                             mAgentTaskStore.delete(task.id);
+                            deleteAgentTaskFile(task.id);
                             mAgentTasks.remove(task);
                             mAgentTaskAdapter.notifyDataSetChanged();
                             mAgentTaskEmptyHint.setVisibility(
@@ -253,6 +254,7 @@ public class HomeFragment extends Fragment {
                 .setTitle("清空所有任务记录？")
                 .setPositiveButton("清空", (d, w) -> {
                     mAgentTaskStore.clear();
+                    deleteAllAgentTaskFiles();
                     mAgentTasks.clear();
                     mAgentTaskAdapter.notifyDataSetChanged();
                     mAgentTaskEmptyHint.setVisibility(View.VISIBLE);
@@ -283,6 +285,8 @@ public class HomeFragment extends Fragment {
         // ── 历史会话抽屉 ──────────────────────────────────────────────────
         mSessionStore   = new SessionStore(requireContext());
         mSessionEntries = mSessionStore.loadAll();
+        // 启动自洁：删除 SessionStore 已不持有的 jsonl 孤儿（来自旧版 leak）
+        cleanupOrphanClaudeJsonl();
         TextView emptyHint = view.findViewById(R.id.session_empty_hint);
         mSessionAdapter = new SessionAdapter(mSessionEntries, mCurrentSessionId,
             new SessionAdapter.Listener() {
@@ -306,6 +310,8 @@ public class HomeFragment extends Fragment {
                             if (!toDelete.isEmpty()) {
                                 new Thread(() -> deleteUbuntuFiles(toDelete)).start();
                             }
+                            // 同步删除 Claude session jsonl（释放磁盘里的图片/历史）
+                            new Thread(() -> deleteClaudeSessionJsonl(entry.id)).start();
                         })
                         .setNegativeButton("取消", null)
                         .show();
@@ -968,7 +974,7 @@ public class HomeFragment extends Fragment {
     // 工具方法
     // =========================================================================
 
-    /** 从历史列表恢复指定会话：清空 UI、设置 resume ID、更新标题。 */
+    /** 从历史列表恢复指定会话：清空 UI、设置 resume ID、更新标题，并异步回放历史对话气泡。 */
     private void resumeSession(SessionStore.Entry entry) {
         stopClaudeProcess();
         mMessages.clear();
@@ -976,10 +982,106 @@ public class HomeFragment extends Fragment {
         mResumeSessionId  = entry.id;
         mCurrentSessionId = entry.id;
         mSessionStarted   = false;
-        mAdapter.addMessage(ChatMessage.system("已切换到历史对话：" + entry.formatTime()));
+        mAdapter.addMessage(ChatMessage.system("已切换到历史对话：" + entry.formatTime() + "（加载中…）"));
         scrollToBottom();
         updateSessionTitle(entry.preview);
         mSessionAdapter.setActiveId(entry.id);
+
+        // 异步从 Claude session jsonl 解析历史对话并渲染
+        final String sid = entry.id;
+        final String header = "── 历史对话：" + entry.formatTime() + " ──";
+        new Thread(() -> {
+            List<ChatMessage> history = loadSessionHistory(sid);
+            mHandler.post(() -> {
+                // 仅当用户没有切到别的 session 才渲染（防快速点击竞态）
+                if (!sid.equals(mCurrentSessionId)) return;
+                mMessages.clear();
+                mMessages.add(ChatMessage.system(header));
+                if (history != null && !history.isEmpty()) {
+                    mMessages.addAll(history);
+                } else {
+                    mMessages.add(ChatMessage.system("（该对话历史已被清理或无内容）"));
+                }
+                mAdapter.notifyDataSetChanged();
+                scrollToBottom();
+            });
+        }, "load-session-history").start();
+    }
+
+    /** 解析 Claude 自身保存的 session jsonl，转换为 ChatMessage 列表用于回放。 */
+    private List<ChatMessage> loadSessionHistory(String sessionId) {
+        File f = new File(CLAUDE_PROJECTS_DIR + "/" + sessionId + ".jsonl");
+        if (!f.exists()) return null;
+        List<ChatMessage> result = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new java.io.FileReader(f))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                try {
+                    JSONObject obj = new JSONObject(line);
+                    String type = obj.optString("type");
+                    if ("user".equals(type)) parseHistUserEvent(obj, result);
+                    else if ("assistant".equals(type)) parseHistAssistantEvent(obj, result);
+                    // 跳过 system / summary / control_response 等
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    private void parseHistUserEvent(JSONObject obj, List<ChatMessage> out) {
+        JSONObject msg = obj.optJSONObject("message");
+        if (msg == null) return;
+        Object content = msg.opt("content");
+        if (content instanceof String) {
+            String s = ((String) content).trim();
+            if (!s.isEmpty()) out.add(ChatMessage.user(s));
+            return;
+        }
+        if (!(content instanceof JSONArray)) return;
+        JSONArray arr = (JSONArray) content;
+        StringBuilder textBuf = new StringBuilder();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject item = arr.optJSONObject(i);
+            if (item == null) continue;
+            String t = item.optString("type");
+            if ("text".equals(t)) {
+                if (textBuf.length() > 0) textBuf.append("\n");
+                textBuf.append(item.optString("text", ""));
+            } else if ("tool_result".equals(t)) {
+                String summary = summarizeToolResult(item.opt("content"));
+                if (summary != null) out.add(ChatMessage.system("📥 工具返回: " + summary));
+            }
+        }
+        String txt = textBuf.toString().trim();
+        if (!txt.isEmpty()) out.add(ChatMessage.user(txt));
+    }
+
+    private void parseHistAssistantEvent(JSONObject obj, List<ChatMessage> out) {
+        JSONObject msg = obj.optJSONObject("message");
+        if (msg == null) return;
+        JSONArray content = msg.optJSONArray("content");
+        if (content == null) return;
+        for (int i = 0; i < content.length(); i++) {
+            JSONObject item = content.optJSONObject(i);
+            if (item == null) continue;
+            String t = item.optString("type");
+            if ("text".equals(t)) {
+                String txt = item.optString("text", "").trim();
+                if (!txt.isEmpty()) out.add(ChatMessage.assistant(txt));
+            } else if ("thinking".equals(t)) {
+                String th = item.optString("thinking", "").trim();
+                if (!th.isEmpty()) {
+                    ChatMessage m = ChatMessage.assistant("");
+                    m.thinking = th;
+                    m.thinkingCollapsed = true;
+                    out.add(m);
+                }
+            } else if ("tool_use".equals(t)) {
+                String name = item.optString("name", "?");
+                out.add(ChatMessage.system("📞 调用工具: " + name));
+            }
+        }
     }
 
     /** 重新从 SessionStore 加载列表，刷新抽屉。 */
@@ -1213,6 +1315,45 @@ public class HomeFragment extends Fragment {
         } catch (Exception ignored) {}
     }
 
+    /** Claude Code 项目历史目录（含所有 session jsonl）。 */
+    private static final String CLAUDE_PROJECTS_DIR =
+        UBUNTU_CLAUDE_HOME + "/.claude/projects/-home-claude";
+
+    /** 启动时扫描，删除 SessionStore 已不持有但磁盘上仍残留的 jsonl 文件。 */
+    private void cleanupOrphanClaudeJsonl() {
+        new Thread(() -> {
+            File dir = new File(CLAUDE_PROJECTS_DIR);
+            if (!dir.isDirectory()) return;
+            File[] files = dir.listFiles((f, name) -> name.endsWith(".jsonl"));
+            if (files == null || files.length == 0) return;
+            java.util.Set<String> validIds = new java.util.HashSet<>();
+            for (SessionStore.Entry e : mSessionStore.loadAll()) validIds.add(e.id);
+            for (File f : files) {
+                String name = f.getName();
+                String id   = name.substring(0, name.length() - ".jsonl".length());
+                if (!validIds.contains(id)) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+        }, "orphan-jsonl-cleanup").start();
+    }
+
+    /** 删除 Claude Code 自身的 session 历史文件（包含 base64 截图，占用大），随对话历史删除一并清理。 */
+    private void deleteClaudeSessionJsonl(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) return;
+        // session id 由 Claude 生成，固定为 UUID 字符不含 shell 元字符，但仍做最小安全过滤
+        String safe = sessionId.replaceAll("[^a-zA-Z0-9-]", "");
+        if (safe.isEmpty()) return;
+        String shell = "rm -f ~/.claude/projects/-home-claude/" + safe + ".jsonl";
+        try {
+            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+                "--user", "claude", "--", "sh", "-c", shell);
+            setupEnv(pb.environment(), "", "");
+            pb.start().waitFor();
+        } catch (Exception ignored) {}
+    }
+
     private void clearAllUploads() {
         if (getContext() == null) return;
         new AlertDialog.Builder(getContext())
@@ -1256,7 +1397,14 @@ public class HomeFragment extends Fragment {
     /** 读取 pipe 文件自上次 offset 以来的新行，逐行解析。 */
     private void processNewPipeLines() {
         File f = new File(AGENT_PIPE_FILE);
-        if (!f.exists() || f.length() <= mAgentPipeOffset) return;
+        if (!f.exists()) return;
+        // pipe 被外部截断（AgentServer 重连）→ 重置 offset 从头读
+        if (f.length() < mAgentPipeOffset) {
+            mAgentPipeOffset = 0;
+            // 截断同时意味着上一个 active task 的运行时缓冲也清空，标记完成
+            mHandler.post(this::finishActiveTaskIfAny);
+        }
+        if (f.length() <= mAgentPipeOffset) return;
         long start = mAgentPipeOffset;
         try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
             raf.seek(mAgentPipeOffset);
@@ -1276,66 +1424,64 @@ public class HomeFragment extends Fragment {
         }
     }
 
-    /** 解析单行 pipe 内容：累积事件到当前 active task，并持久化。 */
+    /** 解析单行 pipe 内容：在 UI 线程统一处理事件 + 写入当前 active task 的归档文件。 */
     private void handleAgentPipeLine(String line) {
         try {
             org.json.JSONObject obj = new org.json.JSONObject(line);
             String type = obj.optString("type");
-            switch (type) {
-                case "as_stream_session_start":
-                    // 新 claude 实例启动：标记上一个 active task 完成
-                    mHandler.post(this::finishActiveTaskIfAny);
-                    break;
-                case "as_stream_in":
-                    // wrapper 捕获到的 stdin 行：可能是上游下发的 user prompt
-                    handleStreamInLine(obj);
-                    break;
-                case "user":
-                    // claude 自身 stdout 的 user 事件：通常是 tool_result，记录为 system 消息
-                    handleClaudeUserEvent(obj);
-                    break;
-                case "assistant":
-                    handleAssistantEvent(obj);
-                    break;
-                case "result":
-                    mHandler.post(this::finishActiveTaskIfAny);
-                    break;
-                default:
-                    // system init / control_response / 其他：忽略
-                    break;
-            }
+            final String rawLine = line;
+            mHandler.post(() -> {
+                processAgentEventOnUi(type, obj);
+                // 处理后再写入任务文件，确保 as_stream_in 这类创建新任务的行落到新任务文件
+                if (mActiveAgentTask != null) appendRawLineToTaskFile(mActiveAgentTask.id, rawLine);
+            });
         } catch (Exception ignored) {}
     }
 
-    /** as_stream_in：base64 解码 → 解析内层 JSON，若是 user prompt 则开新任务。 */
-    private void handleStreamInLine(org.json.JSONObject envelope) {
+    /** UI 线程同步处理一个 pipe 事件（必要时切换 active task）。 */
+    private void processAgentEventOnUi(String type, org.json.JSONObject obj) {
+        switch (type) {
+            case "as_stream_session_start":
+                finishActiveTaskIfAny();
+                break;
+            case "as_stream_in": {
+                String prompt = decodeStreamInPrompt(obj);
+                if (prompt != null && !prompt.isEmpty()) startNewAgentTask(prompt);
+                break;
+            }
+            case "user": {
+                org.json.JSONObject msg = obj.optJSONObject("message");
+                if (msg != null) {
+                    String summary = summarizeToolResult(msg.opt("content"));
+                    if (summary != null) appendToActiveTask(ChatMessage.system("📥 工具返回: " + summary));
+                }
+                break;
+            }
+            case "assistant":
+                handleAssistantEvent(obj);
+                break;
+            case "result":
+                finishActiveTaskIfAny();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** 解码 as_stream_in 的内层 JSON，若是 user prompt 则返回文本。 */
+    private String decodeStreamInPrompt(org.json.JSONObject envelope) {
         try {
             String b64 = envelope.optString("b64", "");
-            if (b64.isEmpty()) return;
+            if (b64.isEmpty()) return null;
             byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
             String inner = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (inner.isEmpty()) return;
+            if (inner.isEmpty()) return null;
             org.json.JSONObject innerObj = new org.json.JSONObject(inner);
-            // 上游往 stdin 写的是 stream-json 格式：{"type":"user","message":{...}}
-            if (!"user".equals(innerObj.optString("type"))) return;
-            String prompt = extractStreamUserPrompt(innerObj);
-            if (prompt == null || prompt.isEmpty()) return;
-            final String p = prompt;
-            mHandler.post(() -> startNewAgentTask(p));
-        } catch (Exception ignored) {}
-    }
-
-    /** Claude 自身的 user 事件（多为 tool_result），追加为 SYSTEM 消息到当前任务。 */
-    private void handleClaudeUserEvent(org.json.JSONObject obj) {
-        try {
-            org.json.JSONObject msg = obj.optJSONObject("message");
-            if (msg == null) return;
-            Object content = msg.opt("content");
-            String summary = summarizeToolResult(content);
-            if (summary == null) return;
-            final String s = summary;
-            mHandler.post(() -> appendToActiveTask(ChatMessage.system("📥 工具返回: " + s)));
-        } catch (Exception ignored) {}
+            if (!"user".equals(innerObj.optString("type"))) return null;
+            return extractStreamUserPrompt(innerObj);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Assistant 事件：text/thinking 追加为 ASSISTANT 消息；tool_use 追加为 SYSTEM 消息。 */
@@ -1366,10 +1512,8 @@ public class HomeFragment extends Fragment {
                     toAppend.add(ChatMessage.system("📞 调用工具: " + name));
                 }
             }
-            if (toAppend.isEmpty()) return;
-            mHandler.post(() -> {
-                for (ChatMessage m : toAppend) appendToActiveTask(m);
-            });
+            // 已经在 UI 线程，直接 append（由 processAgentEventOnUi 调用）
+            for (ChatMessage m : toAppend) appendToActiveTask(m);
         } catch (Exception ignored) {}
     }
 
@@ -1473,6 +1617,35 @@ public class HomeFragment extends Fragment {
         }
         mActiveAgentTask = null;
         FloatingStatusService.updateStatus("● 就绪", 0xFF388E3C, "");
+    }
+
+    // ── 任务文件归档（每任务一个 .jsonl，方便随任务删除）─────────────────
+    private File agentTaskFile(String taskId) {
+        File dir = new File(requireContext().getFilesDir(), "agent-tasks");
+        if (!dir.exists()) dir.mkdirs();
+        return new File(dir, taskId + ".jsonl");
+    }
+
+    private void appendRawLineToTaskFile(String taskId, String line) {
+        try (FileWriter fw = new FileWriter(agentTaskFile(taskId), true)) {
+            fw.write(line);
+            fw.write('\n');
+        } catch (Exception ignored) {}
+    }
+
+    private void deleteAgentTaskFile(String taskId) {
+        File f = agentTaskFile(taskId);
+        if (f.exists()) //noinspection ResultOfMethodCallIgnored
+            f.delete();
+    }
+
+    private void deleteAllAgentTaskFiles() {
+        File dir = new File(requireContext().getFilesDir(), "agent-tasks");
+        if (!dir.isDirectory()) return;
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) //noinspection ResultOfMethodCallIgnored
+            f.delete();
     }
 
     // =========================================================================

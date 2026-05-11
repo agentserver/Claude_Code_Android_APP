@@ -160,6 +160,7 @@ public class AgentServerFragment extends Fragment {
         if (prefix == null || prefix.isEmpty()) prefix = "/data/data/com.termux/files/usr";
         String home     = prefix + "/../home";
         String logFile  = home + "/agentserver-agent.log";
+        String pipeFile = prefix + "/var/lib/proot-distro/installed-rootfs/ubuntu/home/claude/.agentserver-pipe.jsonl";
         String pdBin    = prefix + "/bin/proot-distro";
         String safeUrl  = url.replace("'", "'\\''");
         String nameFlag = device.isEmpty() ? "" : " --name '" + device.replace("'", "'\\''") + "'";
@@ -176,6 +177,7 @@ public class AgentServerFragment extends Fragment {
             "for _p in $(pgrep -f 'agentserver claudecode' 2>/dev/null);" +
             " do [ \"$_p\" != \"$$\" ] && kill \"$_p\" 2>/dev/null; done; sleep 1\n" +
             "> '" + logFile + "'\n" +          // 清空旧日志，避免历史内容干扰状态检测
+            "> '" + pipeFile + "' 2>/dev/null || true\n" +  // 截断主 pipe（任务归档已在 App 私有目录里，此处只清运行时缓冲）
             "echo '[*] 正在启动 AgentServer...'\n" +
             // bash -c 包裹：显式传入 ANTHROPIC_API_KEY（来自 ApiKeyStore）+ 兜底 source .bashrc
             // 说明：

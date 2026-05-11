@@ -45,3 +45,6 @@ local.properties
 .swp
 ehthumbs.db
 Thumbs.db
+
+# Local dev artifacts
+task.jsonl
