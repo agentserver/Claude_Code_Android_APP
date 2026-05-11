@@ -19,21 +19,19 @@
   - 流式输出渲染（Claude Code `stream-json`）
   - **历史**：会话列表、切换/删除、从 Claude session jsonl 回放
   - **记忆（Memory）**：查看/管理（与 Claude Code 工作目录一致）
-  - **Skills**：查看/管理 `.claude/commands` 等
-  - **AgentServer 任务**：展示上游下发任务、Claude 执行状态与输出摘要
-  - **已上传文件**：管理上传记录、按会话归档/清理
-
+  - **技能**：查看/管理skills `.claude/commands` 等
+  - **任务**：管理来自AgentServer下发的任务、Claude 执行状态与输出内容
+  - **已上传文件**：管理从本机上传给AI分析的文档、图片
+    
 ## 使用方式（首次安装）
 
-1. 安装 APK 后打开应用（建议保持前台与联网，首次初始化可能需要几分钟）
-2. 进入 **Terminal**（或首次进入时自动触发）
-   - 应用会自动完成 Ubuntu/Claude Code/AgentServer 的安装与修复
-3. 打开 **API Key** 页面
+1. 安装 APK 后打开应用（最好保持前台与联网，首次初始化可能需要几分钟）
+2. 打开 **API Key** 页面
    - 添加 `ANTHROPIC_API_KEY`
    - 如需自建网关可填写 `ANTHROPIC_BASE_URL`，否则留空使用官方默认
    - 设为“当前使用”
-4. 打开 **Home** 页面开始对话
-5. 如需接入上游任务：打开 **AgentServer** 页面填入 `Server URL`（例如 `https://agent.cs.ac.cn`）并点击连接
+3. 打开 **Home** 页面开始对话
+4. 如需接入上游任务：打开 **AgentServer** 页面填入 `Server URL`（例如 `https://agent.cs.ac.cn`）并点击连接
 
 ## AgentServer 任务显示是如何实现的
 
@@ -54,10 +52,3 @@
 - Android Studio + JDK 17
 - Debug 构建：`./gradlew :app:assembleDebug`
 - APK 输出目录：`app/build/outputs/apk/`
-
-## 免责声明与许可证
-
-- 本项目基于 `termux/termux-app` 修改，**非** Termux 官方版本。
-- Claude / Claude Code 为 Anthropic 产品，本项目与 Anthropic 无隶属关系。
-- 许可证：见 `LICENSE.md`（GPLv3-only）及上游各模块条款。
-
