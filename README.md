@@ -1,74 +1,63 @@
 # Claude Code Android App（Termux Fork）
 
-一个基于 Termux 的 Android 应用：在手机上自动安装 Ubuntu（`proot-distro`），并在 Ubuntu 内自动部署 **Claude Code**。同时提供 Chat 风格 UI、API Key 管理、AgentServer 集成，以及 **Android API → localhost HTTP** 桥接，方便 Claude Code 在 Ubuntu 内获取电量/传感器/剪贴板等实时信息。
+基于 Termux 的 Android 应用：在手机上**一键全自动**部署 Ubuntu（`proot-distro`）、Claude Code、MCP（手机能力）与 AgentServer，并提供带管理能力的主页聊天 UI。
 
-- 上游基础：`termux/termux-app`（本项目是其 Fork）
-- AgentServer：`agentserver/agentserver`
-- License：继承 Termux，**GPLv3-only**（见 `LICENSE.md`）
+仓库默认面向 **arm64** 设备（内置离线安装包）。
 
-## 功能概览
+## 主要功能
 
-- **Home**：Chat UI（通过 `claude -p --output-format stream-json` 运行并渲染流式输出）
-- **Terminal**：完整 Termux 终端（默认 Tab）
-- **API Key**：管理 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`（可保存多组并切换当前）
-- **AgentServer**：自动安装并后台启动 `agentserver claudecode`，支持查看日志与停止
-- **Android API 桥接**：App 内置 HTTP 服务 `127.0.0.1:17681`，供 Ubuntu 内用 `curl`/wrapper 调用电量、相机信息、传感器、Wi‑Fi、剪贴板
+- **全自动快速安装**
+  - 首次启动自动初始化 Termux 运行环境
+  - 自动部署 Ubuntu/Claude Code/MCP/AgentServer（优先走快照/离线包，失败再回退在线安装）
+- **API Key 配置**
+  - 管理多组 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`
+  - 一键切换“当前使用”的 Key（主页聊天与 AgentServer 共用）
+- **AgentServer 配置与连接**
+  - 在 App 内直接连接上游 AgentServer（支持 `--resume` 复用沙盒）
+  - 连接日志与实时监控（含 `mcp-audit.log`）
+- **主页聊天 UI（Home）**
+  - 流式输出渲染（Claude Code `stream-json`）
+  - **历史**：会话列表、切换/删除、从 Claude session jsonl 回放
+  - **记忆（Memory）**：查看/管理（与 Claude Code 工作目录一致）
+  - **Skills**：查看/管理 `.claude/commands` 等
+  - **AgentServer 任务**：展示上游下发任务、Claude 执行状态与输出摘要
+  - **已上传文件**：管理上传记录、按会话归档/清理
 
-## 使用方法（首次运行）
+## 使用方式（首次安装）
 
-1. 安装 APK（Android Studio 运行，或自行构建）
-2. 打开 App → 进入 **Terminal**
-   - App 会自动执行 `~/.ubuntu-setup.sh` 来安装 `proot-distro` + Ubuntu，并自动登录
-   - 如果没有自动开始，可手动运行：`bash ~/.ubuntu-setup.sh`
-3. 首次进入 Ubuntu 后会自动触发安装向导（写在 `/root/.bashrc`）
-   - `~/.claude-setup.sh`：安装 Node.js + Claude Code，并可按提示写入 API Key（也可跳过，改在 App 的 **API Key** Tab 配置）
-   - `~/.agentserver-setup.sh`：安装 AgentServer（arm64 优先使用离线包；否则从 GitHub Release 下载）
-4. 在 **API Key** Tab 添加并“设为当前”
-   - Base URL 默认 `https://code.ai.cs.ac.cn`，可清空以使用官方 `https://api.anthropic.com`
-5. 在 **Home** Tab 输入消息开始使用；也可在 Terminal 里运行
-   - `proot-distro login ubuntu`
-   - `claude`
+1. 安装 APK 后打开应用（建议保持前台与联网，首次初始化可能需要几分钟）
+2. 进入 **Terminal**（或首次进入时自动触发）
+   - 应用会自动完成 Ubuntu/Claude Code/AgentServer 的安装与修复
+3. 打开 **API Key** 页面
+   - 添加 `ANTHROPIC_API_KEY`
+   - 如需自建网关可填写 `ANTHROPIC_BASE_URL`，否则留空使用官方默认
+   - 设为“当前使用”
+4. 打开 **Home** 页面开始对话
+5. 如需接入上游任务：打开 **AgentServer** 页面填入 `Server URL`（例如 `https://agent.cs.ac.cn`）并点击连接
 
-## AgentServer
+## AgentServer 任务显示是如何实现的
 
-- 打开 **AgentServer** Tab
-  - 填写 `Server URL`（例如 `https://agent.cs.ac.cn`）与 `Device Name`（可选）
-  - 点击“连接”后，后台会运行：`agentserver claudecode --skip-open-browser ...`
-  - 如日志出现 OAuth URL，请复制到浏览器完成授权
-  - 日志文件：`~/agentserver-agent.log`
-- 也可在 Ubuntu 里手动运行
-  - `agentserver login --server <URL>`
-  - `agentserver claudecode --server <URL>`
+- AgentServer 在 Ubuntu 内运行时会调用 `claude` 执行任务。
+- 应用在 Ubuntu 的 `~/.local/bin/claude` 注入 wrapper：
+  - 把任务 prompt 与 Claude 的 `stream-json` 输出追加写入 `~/.agentserver-pipe.jsonl`
+  - Home 页后台监听该 pipe 并渲染为“AgentServer 任务”列表
 
-## Android API 桥接（Ubuntu 内）
+## 目录与日志（排查用）
 
-App 进程内启动本地 HTTP 服务：`127.0.0.1:17681`（仅 loopback）。
-
-- 直接调用
-  - `curl -s http://127.0.0.1:17681/battery`
-  - `curl -s http://127.0.0.1:17681/clipboard`
-- Ubuntu 内自动生成 wrapper（`/usr/local/bin/termux-*`）
-  - `termux-battery-status`
-  - `termux-camera-info`
-  - `termux-sensor`
-  - `termux-wifi-connectioninfo`
-  - `termux-clipboard-get`
-
-> 需要相关 Android 权限（相机/定位/传感器等）。App 被系统后台杀死时，HTTP 桥接也会停止。
+- Termux HOME：`/data/data/com.termux/files/home`
+  - AgentServer 日志：`~/agentserver-agent.log`
+  - MCP 审计日志：`~/mcp-audit.log`
+- Ubuntu rootfs：`/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/ubuntu`
 
 ## 构建
 
-- 环境：Android Studio（建议 JDK 17+）
-- 命令：`./gradlew assembleDebug`
-- 产物：`app/build/outputs/apk/`
+- Android Studio + JDK 17
+- Debug 构建：`./gradlew :app:assembleDebug`
+- APK 输出目录：`app/build/outputs/apk/`
 
-## FAQ
+## 免责声明与许可证
 
-- Ubuntu 登录出现 `signal 11` / 崩溃：尝试 `proot-distro login --kernel 5.4.0 ubuntu`
-- `claude native binary not installed`：在 Ubuntu 内运行 `npm install -g @anthropic-ai/claude-code --include=optional`
+- 本项目基于 `termux/termux-app` 修改，**非** Termux 官方版本。
+- Claude / Claude Code 为 Anthropic 产品，本项目与 Anthropic 无隶属关系。
+- 许可证：见 `LICENSE.md`（GPLv3-only）及上游各模块条款。
 
-## 致谢与声明
-
-- 本项目基于 `termux/termux-app` 修改，不是 Termux 官方版本。
-- Claude / Claude Code 为 Anthropic 产品，本项目不隶属 Anthropic。
-- License：见 `LICENSE.md`（GPLv3-only）与上游各模块例外条款。
