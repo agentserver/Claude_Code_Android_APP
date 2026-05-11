@@ -524,7 +524,7 @@ public class HomeFragment extends Fragment {
 
         mWaitingResponse = true;
         updateStatus("● 运行中", 0xFF1565C0);
-        FloatingStatusService.updateStatus("● 运行中", 0xFF1565C0, displayText);
+        FloatingStatusService.updateStatus("● 运行中", 0xFF1565C0, displayText, true);
 
         final String finalKey        = apiKey;
         final String finalBaseUrl    = baseUrl;
@@ -668,7 +668,7 @@ public class HomeFragment extends Fragment {
                     refreshSessionDrawer();
                 }
                 updateStatus("● 就绪", 0xFF2E7D32);
-                FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "");
+                FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
             });
         }, "ClaudeProcess");
         mClaudeThread.setDaemon(true);
@@ -686,7 +686,7 @@ public class HomeFragment extends Fragment {
         }
         mWaitingResponse = false;
         updateStatus("● 就绪", 0xFF2E7D32);
-        FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "");
+        FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
     }
 
     /** 设置子进程所需的 Termux + ubuntu 环境变量。 */
@@ -1593,7 +1593,7 @@ public class HomeFragment extends Fragment {
         mAgentTaskAdapter.notifyDataSetChanged();
         mAgentTaskEmptyHint.setVisibility(View.GONE);
         FloatingStatusService.updateStatus("● 执行任务", 0xFFF57C00,
-            prompt.length() > 40 ? prompt.substring(0, 40) + "…" : prompt);
+            prompt.length() > 40 ? prompt.substring(0, 40) + "…" : prompt, true);
     }
 
     /** 把消息追加到当前 active task（无 active 则忽略），并持久化。 */
@@ -1616,7 +1616,7 @@ public class HomeFragment extends Fragment {
             }
         }
         mActiveAgentTask = null;
-        FloatingStatusService.updateStatus("● 就绪", 0xFF388E3C, "");
+        FloatingStatusService.updateStatus("● 就绪", 0xFF388E3C, "", false);
     }
 
     // ── 任务文件归档（每任务一个 .jsonl，方便随任务删除）─────────────────

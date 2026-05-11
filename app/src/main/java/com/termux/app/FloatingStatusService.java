@@ -15,13 +15,13 @@ import android.widget.TextView;
 import com.termux.R;
 
 /**
- * 后台悬浮窗：App 切到后台时显示 Claude 当前状态和最后一条消息预览。
- * 通过 static updateStatus() 从任意线程更新内容。
+ * 后台悬浮窗：只在 (App 后台 && Claude 正在执行任务 && 用户未手动关闭) 时显示。
+ * 通过 static updateStatus() 从任意线程更新内容并切换 busy 状态。
  */
 public class FloatingStatusService extends Service {
 
-    public static final String ACTION_SHOW = "SHOW";
-    public static final String ACTION_HIDE = "HIDE";
+    public static final String ACTION_SHOW = "SHOW";  // App 进入后台
+    public static final String ACTION_HIDE = "HIDE";  // App 回到前台
 
     private static FloatingStatusService sInstance;
 
@@ -32,22 +32,42 @@ public class FloatingStatusService extends Service {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
+    // ── 显示控制状态（决定 mFloatingView 可见性）────────────────────────────
+    private          boolean mInBackground = false;
+    private static volatile boolean sIsBusy      = false;
+    private static volatile boolean sUserClosed  = false;
+
     // 最新状态缓存（Service 可能在 SHOW 前就收到更新）
     private static volatile String sPendingStatus  = "● 等待中";
     private static volatile String sPendingPreview = "";
     private static volatile int    sPendingColor   = 0xFF888888;
 
-    // ── 静态接口（供 HomeFragment 跨线程调用） ─────────────────────────────
+    // ── 静态接口（供 HomeFragment 跨线程调用）──────────────────────────────
 
-    /** 更新悬浮窗显示的状态和消息预览；线程安全。 */
-    public static void updateStatus(String status, int color, String preview) {
+    /**
+     * 更新悬浮窗显示的状态、消息预览，并指明 Claude 是否正在执行任务。
+     * isBusy=true → 满足其它条件时显示；isBusy=false → 隐藏。
+     * busy 从 false→true 的边沿会重置 sUserClosed（让新任务能再次弹出）。
+     */
+    public static void updateStatus(String status, int color, String preview, boolean isBusy) {
+        boolean wasBusy = sIsBusy;
         sPendingStatus  = status;
         sPendingColor   = color;
         sPendingPreview = preview != null ? preview : "";
+        sIsBusy         = isBusy;
+        if (!wasBusy && isBusy) sUserClosed = false;
         FloatingStatusService inst = sInstance;
         if (inst != null) {
-            inst.mHandler.post(inst::applyPending);
+            inst.mHandler.post(() -> {
+                inst.applyPending();
+                inst.updateVisibility();
+            });
         }
+    }
+
+    /** 兼容旧 3 参形式：默认认为是 idle 更新（busy=false）。 */
+    public static void updateStatus(String status, int color, String preview) {
+        updateStatus(status, color, preview, false);
     }
 
     // ── Service 生命周期 ────────────────────────────────────────────────────
@@ -60,6 +80,15 @@ public class FloatingStatusService extends Service {
         mFloatingView  = LayoutInflater.from(this).inflate(R.layout.layout_floating_status, null);
         mStatusText    = mFloatingView.findViewById(R.id.float_status);
         mPreviewText   = mFloatingView.findViewById(R.id.float_preview);
+
+        // 关闭按钮：用户主动关掉本次任务的悬浮窗，下一个新任务才会再次出现
+        View closeBtn = mFloatingView.findViewById(R.id.float_close);
+        if (closeBtn != null) {
+            closeBtn.setOnClickListener(v -> {
+                sUserClosed = true;
+                mFloatingView.setVisibility(View.GONE);
+            });
+        }
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -82,10 +111,12 @@ public class FloatingStatusService extends Service {
         if (intent == null) return START_STICKY;
         String action = intent.getAction();
         if (ACTION_SHOW.equals(action)) {
+            mInBackground = true;
             applyPending();
-            mFloatingView.setVisibility(View.VISIBLE);
+            updateVisibility();
         } else if (ACTION_HIDE.equals(action)) {
-            mFloatingView.setVisibility(View.GONE);
+            mInBackground = false;
+            updateVisibility();
         }
         return START_STICKY;
     }
@@ -115,5 +146,11 @@ public class FloatingStatusService extends Service {
             mPreviewText.setText(preview.length() > 40 ? preview.substring(0, 40) + "…" : preview);
             mPreviewText.setVisibility(View.VISIBLE);
         }
+    }
+
+    private void updateVisibility() {
+        if (mFloatingView == null) return;
+        boolean shouldShow = mInBackground && sIsBusy && !sUserClosed;
+        mFloatingView.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
 }
