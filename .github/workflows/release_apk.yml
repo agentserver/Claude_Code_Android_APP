@@ -1,0 +1,108 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      # 触发条件：推送 v 开头的版本号 tag（v1.0 / v1.0.0 / v2.3-beta 等）
+      # snapshot-* tag 不会触发，避免与 Ubuntu 快照 release 冲突
+      - 'v[0-9]+.[0-9]+*'
+  # 允许在 GitHub 网页上手动触发（输入版本号）
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要发布的版本 tag（如 v1.0.0），不带 v 也行'
+        required: true
+
+permissions:
+  contents: write   # 创建/更新 release 需要
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SNAPSHOT_RELEASE_TAG: snapshot-v1   # 来自 git tag list 中已存在的 snapshot release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # 从 snapshot-v1 release 下载 Ubuntu + Claude 快照（被 .gitignore 排除，不在源码中）
+      # 失败不致命：APK 仍可构建，只是首次启动时需要联网下载快照
+      - name: Download Ubuntu + Claude snapshot from snapshot-v1 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p app/src/main/assets/ubuntu-snapshot
+          if gh release download "$SNAPSHOT_RELEASE_TAG" \
+               --repo "${{ github.repository }}" \
+               --pattern '*.tar.xz' \
+               --dir app/src/main/assets/ubuntu-snapshot/ ; then
+            echo "✓ Snapshot downloaded:"
+            ls -lh app/src/main/assets/ubuntu-snapshot/
+          else
+            echo "::warning::未能从 $SNAPSHOT_RELEASE_TAG 拉取快照，APK 将不内置离线快照（首次安装需联网）"
+          fi
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      # 找到产物 + 计算 sha256
+      - name: Collect artifacts
+        id: artifacts
+        run: |
+          set -e
+          APK=$(find app/build/outputs/apk/debug -name "*universal*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::No universal APK found under app/build/outputs/apk/debug"
+            ls -R app/build/outputs/apk/ || true
+            exit 1
+          fi
+          DIR=$(dirname "$APK")
+          BASE=$(basename "$APK")
+          (cd "$DIR" && sha256sum "$BASE" > "${BASE}.sha256")
+          ls -lh "$DIR"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "sha=$DIR/${BASE}.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            T="${{ inputs.version }}"
+            case "$T" in v*) ;; *) T="v$T" ;; esac
+          else
+            T="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$T" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.artifacts.outputs.apk }}
+            ${{ steps.artifacts.outputs.sha }}
+          body: |
+            ## Claude Code Android App ${{ steps.tag.outputs.tag }}
+
+            **下载下面的 universal APK 即可安装。**
+
+            首次安装注意事项与配置步骤参见 [README](../blob/master/README.md)。
+
+            ---
+            *此 release 由 GitHub Actions 自动构建（push tag 触发），构建脚本：[`.github/workflows/release_apk.yml`](../blob/master/.github/workflows/release_apk.yml)*
