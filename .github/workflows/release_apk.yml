@@ -92,7 +92,6 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
-          generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
             ${{ steps.artifacts.outputs.apk }}
@@ -103,6 +102,3 @@ jobs:
             **下载下面的 universal APK 即可安装。**
 
             首次安装注意事项与配置步骤参见 [README](../blob/master/README.md)。
-
-            ---
-            *此 release 由 GitHub Actions 自动构建（push tag 触发），构建脚本：[`.github/workflows/release_apk.yml`](../blob/master/.github/workflows/release_apk.yml)*
