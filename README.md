@@ -152,7 +152,7 @@ DeepSeek 官方提供 Anthropic 兼容端点：
 
 ### Claude 说"截屏权限未授予"
 
-去主页点顶部「授权截图」按钮。每次 App 重启都要重新点一次（Android MediaProjection 强制要求）。
+去主页点顶部「授权截图」按钮。每次 App 重启都要重新点一次。
 
 ### Claude 说"无障碍服务未启用"
 
