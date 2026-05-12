@@ -1009,6 +1009,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
+    /**
+     * 切走终端模式之前，强制清掉当前焦点 + 隐藏软键盘。
+     * TerminalView 持有的 IME InputConnection 不会因为 setVisibility(GONE) 自动断开，
+     * 否则切到 HomeFragment 后第一次按键会被 TerminalView 偷走（变成 bash 命令）。
+     */
+    private void clearFocusAndHideKeyboard() {
+        View f = getCurrentFocus();
+        if (f != null) {
+            f.clearFocus();
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(f.getWindowToken(), 0);
+        }
+    }
+
     /** 切换到简化 UI（主页）模式：隐藏终端，显示 HomeFragment。 */
     public void showHomeMode() {
         DrawerLayout drawer = getDrawer();
@@ -1019,6 +1034,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (drawer.isDrawerOpen(android.view.Gravity.START))
             drawer.closeDrawer(android.view.Gravity.START);
 
+        clearFocusAndHideKeyboard();
         drawer.setVisibility(View.GONE);
         if (toolbar != null) toolbar.setVisibility(View.GONE);
         container.setVisibility(View.VISIBLE);
@@ -1050,6 +1066,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (drawer.isDrawerOpen(android.view.Gravity.START))
             drawer.closeDrawer(android.view.Gravity.START);
 
+        clearFocusAndHideKeyboard();
         drawer.setVisibility(View.GONE);
         if (toolbar != null) toolbar.setVisibility(View.GONE);
         container.setVisibility(View.VISIBLE);
@@ -1079,6 +1096,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (drawer.isDrawerOpen(android.view.Gravity.START))
             drawer.closeDrawer(android.view.Gravity.START);
 
+        clearFocusAndHideKeyboard();
         drawer.setVisibility(View.GONE);
         if (toolbar != null) toolbar.setVisibility(View.GONE);
         container.setVisibility(View.VISIBLE);
@@ -1108,6 +1126,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (drawer.isDrawerOpen(android.view.Gravity.START))
             drawer.closeDrawer(android.view.Gravity.START);
 
+        clearFocusAndHideKeyboard();
         drawer.setVisibility(View.GONE);
         if (toolbar != null) toolbar.setVisibility(View.GONE);
         container.setVisibility(View.VISIBLE);
