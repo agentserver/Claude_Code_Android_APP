@@ -176,16 +176,16 @@ public class AutoClaudeManager {
         // 选择接入点
         s.append("        echo ''\n");
         s.append("        echo 'API 接入点：'\n");
-        s.append("        echo '  1) 官方  https://api.anthropic.com'\n");
-        s.append("        echo '  2) 中科院 https://code.ai.cs.ac.cn  [国内推荐]'\n");
+        s.append("        echo '  1) 官方     https://api.anthropic.com'\n");
+        s.append("        echo '  2) DeepSeek https://api.deepseek.com/anthropic  [Anthropic 兼容]'\n");
         s.append("        echo '  3) 自定义 URL'\n");
-        s.append("        printf '选择 [1/2/3，默认 2]: '\n");
+        s.append("        printf '选择 [1/2/3，默认 1]: '\n");
         s.append("        read -r _ep\n");
-        s.append("        [ -z \"$_ep\" ] && _ep=2\n");
+        s.append("        [ -z \"$_ep\" ] && _ep=1\n");
         s.append("        case \"$_ep\" in\n");
-        s.append("            1) _base='' ;;\n");
+        s.append("            2) _base='https://api.deepseek.com/anthropic' ;;\n");
         s.append("            3) printf 'Base URL: '; read -r _base ;;\n");
-        s.append("            *) _base='https://code.ai.cs.ac.cn' ;;\n");
+        s.append("            *) _base='' ;;\n");
         s.append("        esac\n\n");
 
         // 写配置到 claude 用户 home（终端以 claude 用户身份运行）

@@ -65,7 +65,7 @@
 
 ### 3. 连接 AgentServer
 
-默认上游地址为 `https://agent.cs.ac.cn`，可把手机当作"远程沙盒"派发任务：
+把手机当作"远程沙盒"，让上游 AgentServer 把任务派发到这里执行：
 
 底部导航 **AgentServer** 页：
 - Server URL：上游服务器地址

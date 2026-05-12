@@ -272,7 +272,7 @@ public class AutoAgentServerManager {
         // ── 使用说明（OAuth 流程，不能在脚本内交互完成）────────────────────
         s.append("echo ''\n");
         s.append("echo '接下来请在 App 的 AgentServer 页面完成配置：'\n");
-        s.append("echo '  ① 输入服务器地址（默认: https://agent.cs.ac.cn）'\n");
+        s.append("echo '  ① 输入上游 AgentServer 服务器地址'\n");
         s.append("echo '  ② 点击「登录」→ 浏览器扫码完成 OAuth 认证'\n");
         s.append("echo '  ③ 点击「启动 Agent」→ 连接 Claude Code 到服务器'\n");
         s.append("echo ''\n");

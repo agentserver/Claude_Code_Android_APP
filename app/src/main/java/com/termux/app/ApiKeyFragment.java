@@ -127,11 +127,9 @@ public class ApiKeyFragment extends Fragment implements ApiKeyAdapter.Listener {
         layout.addView(etKey);
 
         EditText etBaseUrl = new EditText(requireContext());
-        etBaseUrl.setHint("API Base URL（留空 = 官方；机构用户填入网关地址）");
+        etBaseUrl.setHint("API Base URL（留空 = 官方 Anthropic；第三方填它们的 Anthropic 兼容地址）");
         etBaseUrl.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         etBaseUrl.setSingleLine(true);
-        // 默认填机构网关，用户可清空换成官方
-        etBaseUrl.setText("https://code.ai.cs.ac.cn");
         layout.addView(etBaseUrl);
 
         new AlertDialog.Builder(requireContext())
