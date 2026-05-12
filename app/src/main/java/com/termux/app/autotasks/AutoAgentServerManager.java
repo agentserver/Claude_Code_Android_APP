@@ -206,7 +206,7 @@ public class AutoAgentServerManager {
             s.append("echo '[!] 警告：Android 本地安装包提取失败，将尝试从网络下载'\n");
         }
         s.append("_tgz='/tmp/agentserver-linux-arm64.tar.gz'\n");
-        s.append("_download_url='https://github.com/agentserver/agentserver/releases/download/v0.40.0/agentserver-linux-arm64.tar.gz'\n");
+        s.append("_download_url='https://github.com/agentserver/agentserver/releases/download/v0.48.1/agentserver-linux-arm64.tar.gz'\n");
         s.append("if [ ! -f \"$_tgz\" ]; then\n");
         s.append("    echo '[*] 本地安装包未找到，尝试从网络下载...'\n");
         s.append("    if command -v curl >/dev/null 2>&1; then\n");
