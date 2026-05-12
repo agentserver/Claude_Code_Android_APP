@@ -1,6 +1,6 @@
 # Claude Code Android App
 
-把 **Claude Code** 完整跑在你的 Android 手机上。基于 Termux 二次开发，用 **proot-distro** 在容器里跑 Ubuntu + Claude Code，再通过 MCP 把手机能力（截屏、点击、输入、相机、传感器）暴露给 Claude，让 Claude 真正能「操作手机」。
+把 **Claude Code** 跑在你的 Android 手机上。基于 Termux 二次开发，用 **proot-distro** 在容器里跑 Ubuntu + Claude Code，再通过 MCP 把手机能力（截屏、点击、输入、相机、传感器）暴露给 Claude，让 Claude 真正能「操作手机」。
 
 > 仓库默认面向 **arm64** 设备，自带离线 Ubuntu 快照。
 > 实现细节记录在 → [app架构.md](./app架构.md)
