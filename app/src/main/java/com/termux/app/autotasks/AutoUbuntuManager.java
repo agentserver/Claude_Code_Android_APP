@@ -91,7 +91,7 @@ public class AutoUbuntuManager {
 
             // 优先级 1：APK 内置快照（离线）
             if (UbuntuSnapshotManager.hasAsset(mActivity.getAssets())) {
-                writeEcho(session, "[*] 发现内置快照，离线部署中 (171MB)...");
+                writeEcho(session, "[*] 发现内置快照，离线部署中 (" + UbuntuSnapshotManager.SNAPSHOT_SIZE_LABEL + ")...");
                 final boolean[] ok = {false};
                 UbuntuSnapshotManager.deployFromAsset(mActivity.getAssets(),
                     makeSnapshotCallback(session, ok));
@@ -100,7 +100,7 @@ public class AutoUbuntuManager {
 
             // 优先级 2：从 GitHub Release 下载
             if (!deployed) {
-                writeEcho(session, "[*] 从 GitHub 下载快照 (171MB)，请稍候...");
+                writeEcho(session, "[*] 从 GitHub 下载快照 (" + UbuntuSnapshotManager.SNAPSHOT_SIZE_LABEL + ")，请稍候...");
                 final boolean[] ok = {false};
                 UbuntuSnapshotManager.deploy(makeSnapshotCallback(session, ok));
                 deployed = ok[0];

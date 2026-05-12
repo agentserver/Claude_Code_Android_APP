@@ -36,6 +36,10 @@ public class UbuntuSnapshotManager {
         "9d84146748aba561286088955e66343c88c078f86179441a1c279d0a9b402bd2";
     public static final long   SNAPSHOT_BYTES = 208_834_812L; // 实际字节数，用于进度计算
 
+    /** 用于 UI 提示，自动从字节数四舍五入算 MB，避免改快照时漏掉硬编码字符串。 */
+    public static final String SNAPSHOT_SIZE_LABEL =
+        Math.round(SNAPSHOT_BYTES / 1024.0 / 1024.0) + "MB";
+
     // APK 内置快照 asset 路径（构建时手动放置，不入 git）
     static final String SNAPSHOT_ASSET_NAME =
         "ubuntu-snapshot/ubuntu-claude-aarch64-20260512.tar.xz";
@@ -102,7 +106,7 @@ public class UbuntuSnapshotManager {
     public static void deployFromAsset(AssetManager assets, Callback cb) {
         try {
             File tmp = new File(TMP_TAR);
-            cb.onStatus("从安装包提取快照（171MB）…");
+            cb.onStatus("从安装包提取快照（" + SNAPSHOT_SIZE_LABEL + "）…");
             try (InputStream in = assets.open(SNAPSHOT_ASSET_NAME);
                  OutputStream out = Files.newOutputStream(tmp.toPath())) {
                 byte[] buf = new byte[65536];
@@ -135,7 +139,7 @@ public class UbuntuSnapshotManager {
     public static void deploy(Callback cb) {
         try {
             // Step 1: 下载
-            cb.onStatus("正在下载 Ubuntu 快照（171MB）…");
+            cb.onStatus("正在下载 Ubuntu 快照（" + SNAPSHOT_SIZE_LABEL + "）…");
             File tmp = new File(TMP_TAR);
             download(SNAPSHOT_URL, tmp, cb);
 
