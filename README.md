@@ -49,7 +49,7 @@
   - 留空 = 走CLaude官方 Anthropic API
   - DeepSeek 填 `https://api.deepseek.com/anthropic`
   - 其他第三方填它们提供的 Anthropic 兼容地址
-- 点击保存后**长按该条 → 设为当前使用**
+- 点击保存后**设为当前使用**
 
 ### 2. 授予运行时权限
 
