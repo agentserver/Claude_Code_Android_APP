@@ -12,11 +12,32 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 上传文件元数据存储。
+ *
+ * 数据模型（per-UUID 目录隔离）：
+ *   每次用户点 📎 上传一个文件，App 生成一个新 UUID。
+ *   物理文件路径：~/uploads/&lt;uuid&gt;/&lt;filename&gt;（每个 UUID 独占一个目录）
+ *   Store 记账：sessionId → List&lt;Entry{uuid, filename}&gt;
+ *
+ *   sessionId 为 PENDING("__pending__") 时表示尚未拿到 Claude session_id 的临时挂靠桶；
+ *   收到 session_id 后调 commitPending 把 entries 迁移到真正的 sessionId 桶（只动元数据，物理路径不变）。
+ */
 public class UploadStore {
 
     private static final String PREFS = "upload_index";
     private static final String KEY   = "data";
     static final String PENDING = "__pending__";
+
+    /** 一次上传的元数据：物理目录 uuid + 用户可读文件名。 */
+    public static final class Entry {
+        public final String uuid;
+        public final String filename;
+        public Entry(String uuid, String filename) {
+            this.uuid     = uuid;
+            this.filename = filename;
+        }
+    }
 
     private final SharedPreferences mPrefs;
 
@@ -24,69 +45,73 @@ public class UploadStore {
         mPrefs = ctx.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    /** 写入指定 session 桶（sessionId 可以是 PENDING） */
-    public synchronized void addFile(String sessionId, String filename) {
-        Map<String, List<String>> all = loadMap();
-        List<String> files = all.computeIfAbsent(sessionId, k -> new ArrayList<>());
-        if (!files.contains(filename)) files.add(filename);
+    /** 写入指定 session 桶（sessionId 可以是 PENDING）。 */
+    public synchronized void addFile(String sessionId, String uuid, String filename) {
+        Map<String, List<Entry>> all = loadMap();
+        List<Entry> entries = all.computeIfAbsent(sessionId, k -> new ArrayList<>());
+        // uuid 唯一，重复添加忽略
+        for (Entry e : entries) if (e.uuid.equals(uuid)) return;
+        entries.add(new Entry(uuid, filename));
         saveMap(all);
     }
 
-    /** 把 __pending__ 桶合并到真实 sessionId 桶，然后清空 pending */
+    /** 把 __pending__ 桶合并到真实 sessionId 桶，清空 pending。只动元数据，不动物理文件。 */
     public synchronized void commitPending(String sessionId) {
-        Map<String, List<String>> all = loadMap();
-        List<String> pending = all.remove(PENDING);
+        Map<String, List<Entry>> all = loadMap();
+        List<Entry> pending = all.remove(PENDING);
         if (pending != null && !pending.isEmpty()) {
-            List<String> dest = all.computeIfAbsent(sessionId, k -> new ArrayList<>());
-            for (String f : pending) {
-                if (!dest.contains(f)) dest.add(f);
+            List<Entry> dest = all.computeIfAbsent(sessionId, k -> new ArrayList<>());
+            for (Entry p : pending) {
+                boolean dup = false;
+                for (Entry d : dest) if (d.uuid.equals(p.uuid)) { dup = true; break; }
+                if (!dup) dest.add(p);
             }
         }
         saveMap(all);
     }
 
-    /** 全量读取，返回 sessionId → 文件名列表 的 Map */
-    public synchronized Map<String, List<String>> getAll() {
+    /** 全量读取，返回 sessionId → entries 的 Map。 */
+    public synchronized Map<String, List<Entry>> getAll() {
         return loadMap();
     }
 
-    /** 读取某 session 的文件列表 */
-    public synchronized List<String> getFiles(String sessionId) {
+    /** 读取某 session 的 entries。 */
+    public synchronized List<Entry> getFiles(String sessionId) {
         return loadMap().getOrDefault(sessionId, new ArrayList<>());
     }
 
-    /** 删除 session 条目，返回该 session 下所有文件名（供调用方删除 Ubuntu 文件） */
-    public synchronized List<String> deleteSession(String sessionId) {
-        Map<String, List<String>> all = loadMap();
-        List<String> files = all.remove(sessionId);
+    /** 删除 session 条目，返回该 session 下所有 entries（供调用方按 uuid 删 Ubuntu 目录）。 */
+    public synchronized List<Entry> deleteSession(String sessionId) {
+        Map<String, List<Entry>> all = loadMap();
+        List<Entry> entries = all.remove(sessionId);
         saveMap(all);
-        return files != null ? files : new ArrayList<>();
+        return entries != null ? entries : new ArrayList<>();
     }
 
-    /** 删除单个文件记录 */
-    public synchronized void deleteFile(String sessionId, String filename) {
-        Map<String, List<String>> all = loadMap();
-        List<String> files = all.get(sessionId);
-        if (files != null) {
-            files.remove(filename);
-            if (files.isEmpty()) all.remove(sessionId);
+    /** 按 uuid 删除单条记录。 */
+    public synchronized void deleteByUuid(String sessionId, String uuid) {
+        Map<String, List<Entry>> all = loadMap();
+        List<Entry> entries = all.get(sessionId);
+        if (entries != null) {
+            entries.removeIf(e -> e.uuid.equals(uuid));
+            if (entries.isEmpty()) all.remove(sessionId);
         }
         saveMap(all);
     }
 
-    /** 清空全部记录 */
-    public synchronized List<String> clearAll() {
-        Map<String, List<String>> all = loadMap();
-        List<String> allFiles = new ArrayList<>();
-        for (List<String> files : all.values()) allFiles.addAll(files);
+    /** 清空全部记录，返回所有 entries（供清理物理文件）。 */
+    public synchronized List<Entry> clearAll() {
+        Map<String, List<Entry>> all = loadMap();
+        List<Entry> allEntries = new ArrayList<>();
+        for (List<Entry> v : all.values()) allEntries.addAll(v);
         mPrefs.edit().remove(KEY).apply();
-        return allFiles;
+        return allEntries;
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
 
-    private Map<String, List<String>> loadMap() {
-        Map<String, List<String>> result = new HashMap<>();
+    private Map<String, List<Entry>> loadMap() {
+        Map<String, List<Entry>> result = new HashMap<>();
         String raw = mPrefs.getString(KEY, null);
         if (raw == null) return result;
         try {
@@ -95,21 +120,37 @@ public class UploadStore {
             while (keys.hasNext()) {
                 String sid = keys.next();
                 JSONArray arr = obj.getJSONArray(sid);
-                List<String> files = new ArrayList<>();
-                for (int i = 0; i < arr.length(); i++) files.add(arr.getString(i));
-                result.put(sid, files);
+                List<Entry> entries = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    // 新格式：每条 entry 是 JSON 对象 {"uuid":..., "filename":...}
+                    // 旧格式（字符串数组）一律丢弃——历史用户附件不多，迁移成本高于价值
+                    Object item = arr.get(i);
+                    if (item instanceof JSONObject) {
+                        JSONObject o = (JSONObject) item;
+                        String uuid = o.optString("uuid", "");
+                        String name = o.optString("filename", "");
+                        if (!uuid.isEmpty()) entries.add(new Entry(uuid, name));
+                    }
+                    // else: 旧字符串格式，跳过
+                }
+                if (!entries.isEmpty()) result.put(sid, entries);
             }
         } catch (Exception ignored) {}
         return result;
     }
 
-    private void saveMap(Map<String, List<String>> map) {
+    private void saveMap(Map<String, List<Entry>> map) {
         try {
             JSONObject obj = new JSONObject();
-            for (Map.Entry<String, List<String>> e : map.entrySet()) {
+            for (Map.Entry<String, List<Entry>> kv : map.entrySet()) {
                 JSONArray arr = new JSONArray();
-                for (String f : e.getValue()) arr.put(f);
-                obj.put(e.getKey(), arr);
+                for (Entry e : kv.getValue()) {
+                    JSONObject o = new JSONObject();
+                    o.put("uuid",     e.uuid);
+                    o.put("filename", e.filename);
+                    arr.put(o);
+                }
+                obj.put(kv.getKey(), arr);
             }
             mPrefs.edit().putString(KEY, obj.toString()).apply();
         } catch (Exception ignored) {}

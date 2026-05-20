@@ -117,10 +117,12 @@ public class HomeFragment extends Fragment {
 
     static class UploadItem {
         String sessionId;    // "__pending__" 或真实 sessionId
+        String uuid;         // 物理目录 uuid（~/uploads/<uuid>/<filename>）
         String filename;
         String sessionLabel; // 会话时间字符串，或 "待关联"
-        UploadItem(String sessionId, String filename, String sessionLabel) {
+        UploadItem(String sessionId, String uuid, String filename, String sessionLabel) {
             this.sessionId    = sessionId;
+            this.uuid         = uuid;
             this.filename     = filename;
             this.sessionLabel = sessionLabel;
         }
@@ -305,10 +307,12 @@ public class HomeFragment extends Fragment {
                             mSessionAdapter.notifyDataSetChanged();
                             emptyHint.setVisibility(
                                 mSessionEntries.isEmpty() ? View.VISIBLE : View.GONE);
-                            // 同步删除该对话关联的上传文件
-                            List<String> toDelete = mUploadStore.deleteSession(entry.id);
+                            // 同步删除该对话关联的上传文件（rm -rf 每个 UUID 目录）
+                            List<UploadStore.Entry> toDelete = mUploadStore.deleteSession(entry.id);
                             if (!toDelete.isEmpty()) {
-                                new Thread(() -> deleteUbuntuFiles(toDelete)).start();
+                                final List<String> uuids = new ArrayList<>();
+                                for (UploadStore.Entry e : toDelete) uuids.add(e.uuid);
+                                new Thread(() -> deleteUbuntuUploadDirs(uuids)).start();
                             }
                             // 同步删除 Claude session jsonl（释放磁盘里的图片/历史）
                             new Thread(() -> deleteClaudeSessionJsonl(entry.id)).start();
@@ -712,17 +716,16 @@ public class HomeFragment extends Fragment {
                     while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
                 }
 
-                // Step 2: use proot-distro login with --bind to copy the file into
-                // the proot home dir. Using ~ expansion means it works regardless of
-                // whether Claude Code runs as root or as a named user.
-                // The shell echoes the final path so we can tell Claude Code where to read.
+                // Step 2: 为本次上传生成独占 UUID 目录，cp 进 ~/uploads/<uuid>/<filename>
+                // 这样不同对话的同名文件不会冲突，删除时 rm -rf <uuid> 也很干净
                 final String finalName = name.replace("'", "_"); // simplify name for shell safety
-                String shell = "mkdir -p ~/uploads"
-                    + " && cp /tmp/.upload_src ~/uploads/'" + finalName + "'"
-                    + " && echo ~/uploads/'" + finalName + "'";
+                final String uploadUuid = java.util.UUID.randomUUID().toString();
+                String shell = "mkdir -p ~/uploads/'" + uploadUuid + "'"
+                    + " && cp /tmp/.upload_src ~/uploads/'" + uploadUuid + "'/'" + finalName + "'"
+                    + " && echo ~/uploads/'" + uploadUuid + "'/'" + finalName + "'";
 
                 // --user claude: 与 sendOrConfirm 保持一致（claude -p 以 claude 用户运行）
-                // ~ 展开为 /home/claude/，文件落在 /home/claude/uploads/
+                // ~ 展开为 /home/claude/，文件落在 /home/claude/uploads/<uuid>/<filename>
                 ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
                     "--user", "claude",
                     "--bind", cacheFile.getAbsolutePath() + ":/tmp/.upload_src",
@@ -742,9 +745,9 @@ public class HomeFragment extends Fragment {
                 }
 
                 final String finalProotPath = prootPath.trim();
-                // 追踪上传文件：若已有 session 写入该 session 桶，否则写入 pending 桶
+                // 追踪：若已有 session 直接写真桶，否则写 pending 桶（commitPending 时迁移元数据）
                 String trackSid = mCurrentSessionId != null ? mCurrentSessionId : UploadStore.PENDING;
-                mUploadStore.addFile(trackSid, finalName);
+                mUploadStore.addFile(trackSid, uploadUuid, finalName);
                 mHandler.post(() -> {
                     mAttachmentPath = finalProotPath; // proot-visible path passed to Claude Code
                     mAttachmentName = finalName;
@@ -1214,9 +1217,10 @@ public class HomeFragment extends Fragment {
                         .setTitle("删除上传文件？")
                         .setMessage(item.filename)
                         .setPositiveButton("删除", (d, w) -> {
-                            mUploadStore.deleteFile(item.sessionId, item.filename);
-                            new Thread(() -> deleteUbuntuFiles(
-                                java.util.Collections.singletonList(item.filename))).start();
+                            mUploadStore.deleteByUuid(item.sessionId, item.uuid);
+                            final String uuid = item.uuid;
+                            new Thread(() -> deleteUbuntuUploadDirs(
+                                java.util.Collections.singletonList(uuid))).start();
                             mUploadItems.remove(item);
                             mUploadAdapter.notifyDataSetChanged();
                             mUploadEmptyHint.setVisibility(
@@ -1250,30 +1254,43 @@ public class HomeFragment extends Fragment {
     }
 
     private void loadUploadFiles() {
-        Map<String, List<String>> all = mUploadStore.getAll();
+        Map<String, List<UploadStore.Entry>> all = mUploadStore.getAll();
         List<SessionStore.Entry> sessions = mSessionStore.loadAll();
         Map<String, String> sessionLabels = new java.util.HashMap<>();
-        for (SessionStore.Entry e : sessions) sessionLabels.put(e.id, e.formatTime());
+        for (SessionStore.Entry s : sessions) sessionLabels.put(s.id, s.formatTime());
 
         mUploadItems.clear();
-        for (Map.Entry<String, List<String>> e : all.entrySet()) {
-            String sid = e.getKey();
+        for (Map.Entry<String, List<UploadStore.Entry>> kv : all.entrySet()) {
+            String sid = kv.getKey();
             String label = UploadStore.PENDING.equals(sid)
                 ? "待关联" : sessionLabels.getOrDefault(sid, "已删除对话");
-            for (String filename : e.getValue()) {
-                mUploadItems.add(new UploadItem(sid, filename, label));
+            for (UploadStore.Entry e : kv.getValue()) {
+                mUploadItems.add(new UploadItem(sid, e.uuid, e.filename, label));
             }
         }
         mUploadAdapter.notifyDataSetChanged();
         mUploadEmptyHint.setVisibility(mUploadItems.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
-    private void deleteUbuntuFiles(List<String> names) {
-        if (names.isEmpty()) return;
-        StringBuilder sb = new StringBuilder("rm -f");
-        for (String n : names) {
-            String safe = n.replace("'", "'\\''");
-            sb.append(" ~/uploads/'").append(safe).append("'");
+    /** 清空整个 ~/uploads/ 内容（保留目录本身），用于"清空全部"按钮。 */
+    private void clearUploadsRoot() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+                "--user", "claude", "--", "sh", "-c",
+                "rm -rf ~/uploads/* ~/uploads/.[!.]*");
+            setupEnv(pb.environment(), "", "");
+            pb.start().waitFor();
+        } catch (Exception ignored) {}
+    }
+
+    /** 按 UUID 目录批量删除上传文件（rm -rf ~/uploads/&lt;uuid&gt;）。 */
+    private void deleteUbuntuUploadDirs(List<String> uuids) {
+        if (uuids.isEmpty()) return;
+        StringBuilder sb = new StringBuilder("rm -rf");
+        for (String u : uuids) {
+            // uuid 是 App 生成的标准 UUID 形式（[a-z0-9-]），但仍做最小过滤
+            String safe = u.replaceAll("[^a-zA-Z0-9-]", "");
+            if (!safe.isEmpty()) sb.append(" ~/uploads/").append(safe);
         }
         try {
             ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
@@ -1328,8 +1345,9 @@ public class HomeFragment extends Fragment {
             .setTitle("清空全部上传文件？")
             .setMessage("将删除 Ubuntu ~/uploads/ 内所有文件，无法恢复。")
             .setPositiveButton("清空", (d, w) -> {
-                List<String> allFiles = mUploadStore.clearAll();
-                new Thread(() -> deleteUbuntuFiles(allFiles)).start();
+                mUploadStore.clearAll();
+                // 不按 uuid 逐个删，直接清空整个 uploads 目录（兼容 orphan dirs）
+                new Thread(() -> clearUploadsRoot()).start();
                 mUploadItems.clear();
                 mUploadAdapter.notifyDataSetChanged();
                 mUploadEmptyHint.setVisibility(View.VISIBLE);
