@@ -1,13 +1,20 @@
 package com.termux.app;
 
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,6 +28,8 @@ import com.termux.R;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * AgentServer 配置与管理页面。
@@ -50,6 +59,16 @@ public class AgentServerFragment extends Fragment {
     private String mLastSandboxId = "";  // 上次成功连接的沙盒 ID，用于 --resume
     private boolean mConnected = false;       // 本次 connect 是否成功建立 tunnel
     private boolean mRetryWithoutResume = false; // 401 后重试（不带 --resume）
+
+    // OAuth Device Flow 授权弹窗：每次 doConnect 重置；同一次连接只弹一次
+    private AlertDialog mAuthDialog;
+    private boolean mAuthDialogShown = false;
+    /** agentserver --skip-open-browser 输出格式：
+     *    To authenticate, visit:
+     *      https://...
+     *  抓 https 链接（device flow 的 verification_uri_complete） */
+    private static final Pattern AUTH_URL_PATTERN =
+        Pattern.compile("https?://[\\w.-]+(?:/[\\w./?=&%+-]*)?");
 
     // ─────────────────────────────────────────────────────────────────────────
     // Fragment 生命周期
@@ -90,6 +109,10 @@ public class AgentServerFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         cancelActiveThread();
+        if (mAuthDialog != null && mAuthDialog.isShowing()) {
+            mAuthDialog.dismiss();
+            mAuthDialog = null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -187,11 +210,23 @@ public class AgentServerFragment extends Fragment {
             " \". /home/claude/.bashrc 2>/dev/null; export PATH=/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; " + finalEnvPrefix + "exec /usr/local/bin/agentserver " + agentArgs + "\"" +
             " >> '" + logFile + "' 2>&1 &\n" +
             "AS_PID=$!\n" +
-            "echo '[*] 等待启动（5 秒）...'\n" +
-            "sleep 5\n" +
-            "echo ''\n" +
-            "echo '=== 当前日志 ==='\n" +
-            "cat '" + logFile + "' 2>/dev/null || echo '（无日志）'\n" +
+            "echo '[*] AgentServer 已启动，等待 OAuth 授权 + tunnel 建立（最多 180s）...'\n" +
+            // tail -F 把日志新增行实时输出到 stdout（→ runScript line callback），
+            // 看门狗子进程检测到关键事件（tunnel 建立 / 鉴权失败）就 kill tail，让脚本退出。
+            // 没有事件时由 timeout 180 兜底，避免脚本无限挂起。
+            "timeout 180 tail -F -n +1 '" + logFile + "' 2>/dev/null &\n" +
+            "TAIL_PID=$!\n" +
+            "( while kill -0 $TAIL_PID 2>/dev/null; do\n" +
+            "    if grep -qE 'tunnel connected|Failed to load session|session not found|got 401|status code 101 but got' '" + logFile + "' 2>/dev/null; then\n" +
+            "      sleep 1\n" +    // 留 1 秒让 tail 把最后一行输出到 stdout（→ runScript callback）
+            "      kill $TAIL_PID 2>/dev/null\n" +
+            "      break\n" +
+            "    fi\n" +
+            "    sleep 1\n" +
+            "  done ) &\n" +
+            "WATCHER_PID=$!\n" +
+            "wait $TAIL_PID 2>/dev/null\n" +
+            "kill $WATCHER_PID 2>/dev/null\n" +
             "echo ''\n" +
             "if kill -0 $AS_PID 2>/dev/null; then\n" +
             "  echo \"[*] Agent 进程运行中（PID: $AS_PID）\"\n" +
@@ -199,8 +234,29 @@ public class AgentServerFragment extends Fragment {
             "  echo '[!] Agent 进程已退出'\n" +
             "fi\n";
 
+        // 重置授权弹窗状态（每次 doConnect 视为新的一次授权流程）
+        mAuthDialogShown = false;
+
         // 监听输出：提取沙盒 ID；遇到 session not found 时自动清除旧 ID 避免下次继续失败
         runScript(script, "连接 AgentServer", line -> {
+            // OAuth Device Flow：检测授权 URL 并弹窗（每次连接最多弹一次）
+            if (!mAuthDialogShown && line.toLowerCase().contains("to authenticate") && line.contains("http")) {
+                Matcher m = AUTH_URL_PATTERN.matcher(line);
+                if (m.find()) {
+                    final String authUrl = m.group();
+                    mAuthDialogShown = true;
+                    post(() -> showAuthDialog(authUrl));
+                }
+            }
+            // 兼容：URL 可能在 "To authenticate, visit:" 的下一行
+            if (!mAuthDialogShown && line.trim().startsWith("http")) {
+                Matcher m = AUTH_URL_PATTERN.matcher(line);
+                if (m.find() && line.contains("device")) {
+                    final String authUrl = m.group();
+                    mAuthDialogShown = true;
+                    post(() -> showAuthDialog(authUrl));
+                }
+            }
             if (line.contains("Failed to load session") || line.contains("session not found")
                     || line.contains("got 401") || line.contains("status code 101 but got")) {
                 mLastSandboxId = "";
@@ -227,6 +283,11 @@ public class AgentServerFragment extends Fragment {
                     post(() -> {
                         setStatus("● 已连接", "#388E3C");
                         setInfo("AgentServer 已连接到服务器（沙盒: " + sid.substring(0, 8) + "...）");
+                        // 授权成功后自动关闭授权弹窗
+                        if (mAuthDialog != null && mAuthDialog.isShowing()) {
+                            mAuthDialog.dismiss();
+                            mAuthDialog = null;
+                        }
                     });
                 }
             }
@@ -439,6 +500,54 @@ public class AgentServerFragment extends Fragment {
     private void appendLog(String text) {
         mLogText.append(text);
         mLogScroll.post(() -> mLogScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    /**
+     * 弹出 OAuth Device Flow 授权对话框：显示 QR 码 + 可复制链接 + 浏览器按钮。
+     * 连接成功（拿到 sandbox id）时会被 doConnect 主动 dismiss。
+     */
+    private void showAuthDialog(String authUrl) {
+        if (getContext() == null) return;
+        // 关掉旧的（同一次连接里防御性）
+        if (mAuthDialog != null && mAuthDialog.isShowing()) mAuthDialog.dismiss();
+
+        View view = LayoutInflater.from(getContext())
+            .inflate(R.layout.dialog_auth_qr, null, false);
+        ImageView qrIv = view.findViewById(R.id.auth_qr_image);
+        TextView  urlTv = view.findViewById(R.id.auth_url_text);
+
+        urlTv.setText(authUrl);
+        Bitmap bmp = QrCodeUtil.generate(authUrl, 600);
+        if (bmp != null) qrIv.setImageBitmap(bmp);
+        else qrIv.setVisibility(View.GONE);
+
+        view.findViewById(R.id.auth_btn_copy).setOnClickListener(b -> {
+            ClipboardManager cm = (ClipboardManager) requireContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("auth url", authUrl));
+            Toast.makeText(getContext(), "链接已复制", Toast.LENGTH_SHORT).show();
+        });
+
+        view.findViewById(R.id.auth_btn_open).setOnClickListener(b -> {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(authUrl));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception e) {
+                Toast.makeText(getContext(), "无法打开浏览器: " + e.getMessage(),
+                    Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        mAuthDialog = new AlertDialog.Builder(requireContext())
+            .setView(view)
+            .setNegativeButton("取消授权", (d, w) -> {
+                d.dismiss();
+                mAuthDialog = null;
+            })
+            .setCancelable(true)
+            .create();
+        mAuthDialog.show();
     }
 
     private void clearLog() {

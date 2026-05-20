@@ -356,6 +356,43 @@ AutoTaskCoordinator.start()
               └─ 持久化 capabilities.json（设备能力清单，供上游展示）
 ```
 
+### 三层组件 & 联网回退矩阵
+
+```
+Layer 1: Termux 端工具（proot, proot-distro, libtalloc, file）
+         ✓ 全部 APK 静态打包到 assets/termux-tools/  → 永不联网
+         （已脱离 Termux apt 仓库，避免上游 4.x→5.x Python 重写这种破坏性变更）
+
+Layer 2: Ubuntu rootfs（约 200 MB 压缩）
+         ① APK 内置快照（assets/ubuntu-snapshot/，含预装 Claude+AgentServer）✓ 离线
+         ② GitHub Release 快照下载（snapshot-v2 tag）  ← 联网
+         ③ proot-distro install ubuntu（裸 Ubuntu base）  ← 联网
+
+Layer 3: 容器内组件
+         · Claude Code（npm install）  ← 联网（除非快照内已预装）
+         · AgentServer（APK 内置 .tgz）  ✓ 离线（dpkg/extract）
+```
+
+**幂等设计**：每个 .bashrc hook 入口先 `command -v <bin>` 检测，已装则自删 hook + 退出。这样组件互不耦合：
+
+| 组件 | 检测方式 | 已安装时行为 |
+|------|---------|-----------|
+| proot-distro / proot / libtalloc / file | `command -v ...` | 跳过 dpkg/install.sh |
+| Ubuntu rootfs | `[ -d $PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu ]` | 跳过 proot-distro install |
+| Claude Code | `command -v claude` | 跳过 npm install |
+| AgentServer | `command -v agentserver` | 跳过 dpkg + tar |
+
+### 常见场景表现
+
+| 场景 | 网络 | 时延 |
+|------|------|------|
+| 全新装 + 快照 OK | 不需要 | ~1 分钟（解压快照） |
+| 全新装 + 快照下载失败 | 需要 | ~5-10 分钟（裸 Ubuntu + npm install claude） |
+| 重启已部署 App | 不需要 | 立即（所有 hook skip） |
+| 手动删了 claude | 需要 | ~3-5 分钟（仅补 claude） |
+
+**唯一未完全解耦点**：Claude Code 版本绑定在 Ubuntu 快照里。升级 Claude → 必须重打快照 + 发新 snapshot-v3 release（或用户进 Ubuntu 终端手动 `npm install -g @anthropic-ai/claude-code`）。
+
 ---
 
 ## 9. 悬浮窗（FloatingStatusService）

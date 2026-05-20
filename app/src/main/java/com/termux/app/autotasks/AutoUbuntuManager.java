@@ -30,6 +30,8 @@ public class AutoUbuntuManager {
     // ── 静态打包的 Termux 端依赖（脱离 apt 仓库，避免上游变更影响）─────────
     /** APK 内 libtalloc deb 资产名（proot 的运行时依赖） */
     private static final String LIBTALLOC_DEB_ASSET = "termux-tools/libtalloc_2.4.3_aarch64.deb";
+    /** APK 内 file deb 资产名（proot-distro 用 file 检测下载档案类型） */
+    private static final String FILE_DEB_ASSET     = "termux-tools/file_5.47_aarch64.deb";
     /** APK 内 proot deb 资产名（aarch64 only；其他架构未支持） */
     private static final String PROOT_DEB_ASSET   = "termux-tools/proot_5.1.107-71_aarch64.deb";
     /** APK 内 proot-distro 源 .tgz 资产名（shell 实现 v4.38.0，跨架构通用）
@@ -438,6 +440,7 @@ public class AutoUbuntuManager {
     private void extractTermuxToolsToHome() {
         String home = TermuxConstants.TERMUX_HOME_DIR_PATH;
         copyAsset(LIBTALLOC_DEB_ASSET, home + "/.termux-tools/libtalloc.deb");
+        copyAsset(FILE_DEB_ASSET,      home + "/.termux-tools/file.deb");
         copyAsset(PROOT_DEB_ASSET,     home + "/.termux-tools/proot.deb");
         copyAsset(PROOT_DISTRO_ASSET,  home + "/.termux-tools/proot-distro.tgz");
     }
@@ -672,11 +675,18 @@ public class AutoUbuntuManager {
         // 锁死版本避免被 apt upgrade 拉到上游 5.x（Python 重写，会破坏我们的 ProcessBuilder 调用）
         sb.append("auto_ok=1; ")
           .append("if ! command -v proot-distro >/dev/null 2>&1; then ")
-          .append("echo \"[*] Installing bundled libtalloc + proot + proot-distro (static)...\"; ")
-          // 安装顺序：libtalloc -> proot -> proot-distro（proot 依赖 libtalloc）
+          .append("echo \"[*] Installing bundled libtalloc + file + proot + proot-distro (static)...\"; ")
+          // 安装顺序：libtalloc -> file -> proot -> proot-distro
+          //   - libtalloc: proot 运行时依赖（libtalloc.so.2）
+          //   - file:      proot-distro install ubuntu 用 file 命令检测下载档案类型
+          //   - proot:     proot-distro 调它执行 chroot
           .append("if [ -f \"$HOME/.termux-tools/libtalloc.deb\" ]; then ")
           .append("echo \"[*] dpkg -i libtalloc.deb\"; ")
           .append("dpkg -i \"$HOME/.termux-tools/libtalloc.deb\" 2>&1 || echo \"[!] libtalloc install warning (may already be installed)\"; ")
+          .append("fi; ")
+          .append("if [ -f \"$HOME/.termux-tools/file.deb\" ]; then ")
+          .append("echo \"[*] dpkg -i file.deb\"; ")
+          .append("dpkg -i \"$HOME/.termux-tools/file.deb\" 2>&1 || echo \"[!] file install warning (may already be installed)\"; ")
           .append("fi; ")
           .append("if [ -f \"$HOME/.termux-tools/proot.deb\" ]; then ")
           .append("echo \"[*] dpkg -i proot.deb\"; ")
