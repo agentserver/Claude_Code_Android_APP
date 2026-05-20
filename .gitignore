@@ -14,6 +14,10 @@ release/
 *.tar.xz
 *.tar.zst
 
+# 例外：APK 内置的 termux 端静态依赖 + agentserver 包必须入 git
+!app/src/main/assets/termux-tools/*.tgz
+!app/src/main/assets/agentserver-linux-arm64.tgz
+
 # Local large assets / helpers
 ubuntu_*.tar.*
 ubuntu-claude-*.tar.*
