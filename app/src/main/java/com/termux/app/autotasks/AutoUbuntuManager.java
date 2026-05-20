@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.terminal.TerminalSession;
 
 import org.json.JSONException;
@@ -26,11 +27,11 @@ public class AutoUbuntuManager {
     // 支持的压缩格式，优先 .tar.gz（与现有 assets 包格式一致），兼容 .tar.xz
     private static final String[] SUPPORTED_EXTENSIONS = { ".tar.gz", ".tar.xz" };
 
-    // pkg 镜像源（清华 > 中科大，按优先级排列）
-    private static final String[] PKG_MIRRORS = {
-        "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main",
-        "https://mirrors.ustc.edu.cn/termux/apt/termux-packages-24"
-    };
+    // ── 静态打包的 Termux 端依赖（脱离 apt 仓库，避免上游变更影响）─────────
+    /** APK 内 proot deb 资产名（aarch64 only；其他架构未支持） */
+    private static final String PROOT_DEB_ASSET   = "termux-tools/proot_5.1.107-71_aarch64.deb";
+    /** APK 内 proot-distro 源 tar.gz 资产名（shell 实现 v4.38.0，跨架构通用） */
+    private static final String PROOT_DISTRO_ASSET = "termux-tools/proot-distro-4.38.0.tar.gz";
 
     // Ubuntu rootfs CDN 镜像（Ubuntu 的 rootfs 来自 Ubuntu 官方 CDN，不是 GitHub）
     // 清华/中科大均镜像了 ubuntu-cdimage，可直接替换域名
@@ -418,11 +419,53 @@ public class AutoUbuntuManager {
 
     private void startRootfsExtraction() {
         Thread t = new Thread(() -> {
+            // 顺手把 Termux 端依赖（proot deb / proot-distro tar.gz）也提取到 Termux home
+            extractTermuxToolsToHome();
             mLocalRootfsPath = extractRootfsAsset();
             mExtractionDone = true;
         }, "ubuntu-rootfs-extract");
         t.setDaemon(true);
         t.start();
+    }
+
+    /**
+     * 把 termux-tools/ 下的静态依赖（proot deb + proot-distro tar.gz）解压到 Termux $HOME。
+     * 安装脚本会从这里 dpkg -i / tar -xzf 安装，**不依赖 apt 仓库**。
+     */
+    private void extractTermuxToolsToHome() {
+        String home = TermuxConstants.TERMUX_HOME_DIR_PATH;
+        copyAsset(PROOT_DEB_ASSET,    home + "/.termux-tools/proot.deb");
+        copyAsset(PROOT_DISTRO_ASSET, home + "/.termux-tools/proot-distro.tar.gz");
+    }
+
+    /** 把 asset 复制到目标路径（若大小一致跳过）。失败静默。 */
+    private void copyAsset(String assetName, String destPath) {
+        try {
+            File dest = new File(destPath);
+            long assetSize;
+            try (InputStream probe = mActivity.getAssets().open(assetName)) {
+                assetSize = probe.available();
+                // available() 对 asset 流近似准；做一次完整读确保大小（小文件成本可忽略）
+                long real = 0;
+                byte[] tmp = new byte[8192];
+                int n;
+                while ((n = probe.read(tmp)) != -1) real += n;
+                assetSize = real;
+            }
+            if (dest.exists() && dest.length() == assetSize) return; // 已就绪
+            dest.getParentFile().mkdirs();
+            File tmpFile = new File(destPath + ".tmp");
+            try (InputStream in = mActivity.getAssets().open(assetName);
+                 FileOutputStream out = new FileOutputStream(tmpFile)) {
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                out.flush();
+            }
+            if (!tmpFile.renameTo(dest)) tmpFile.delete();
+        } catch (IOException ignored) {
+            // 资产缺失或写入失败：让安装脚本里 [ -f ... ] 兜底跳过
+        }
     }
 
     /**
@@ -536,10 +579,6 @@ public class AutoUbuntuManager {
     private String buildUbuntuCommand() {
         String localPath = mLocalRootfsPath != null ? mLocalRootfsPath : "";
 
-        // pkg 镜像列表拼成 shell 字符串："mirror1 mirror2 ..."
-        StringBuilder pkgMirrors = new StringBuilder();
-        for (String m : PKG_MIRRORS) pkgMirrors.append(m).append(" ");
-
         // rootfs CDN 镜像列表：每对加单引号避免 | 被 bash 解析为管道符
         StringBuilder rootfsMirrors = new StringBuilder();
         for (String[] pair : ROOTFS_CDN_MIRRORS) {
@@ -564,14 +603,6 @@ public class AutoUbuntuManager {
           .append("if [ $i -lt $attempts ]; then echo \"[*] retry in ${delay}s\"; sleep $delay; fi; ")
           .append("i=$((i+1)); delay=$((delay*2)); ")
           .append("done; return 1; }; ");
-
-        // switch_pkg_mirror: 切换 Termux apt 源
-        // 同时删除 sources.list.d/ 下的动态镜像列表文件，防止 pkg 的测速机制覆盖我们的配置
-        sb.append("switch_pkg_mirror() { ")
-          .append("mirror=\"$1\"; ")
-          .append("echo \"deb $mirror stable main\" > $PREFIX/etc/apt/sources.list; ")
-          .append("rm -f $PREFIX/etc/apt/sources.list.d/*.list 2>/dev/null; ")
-          .append("echo \"[*] apt source -> $mirror\"; }; ");
 
         // override_distro_setup: 直接在 proot-distro 系统文件末尾追加 distro_setup 无操作覆盖。
         // proot-distro 4.38 实际读 $PREFIX/etc/proot-distro/ubuntu.sh，而非用户配置目录；
@@ -630,35 +661,39 @@ public class AutoUbuntuManager {
               .append("fi; }; ");
         }
 
-        // ── Step 1: 安装 proot-distro ─────────────────────────────────────────
+        // ── Step 1: 安装 proot + proot-distro（静态打包，不走 apt 仓库）───────
+        // 来源：APK assets/termux-tools/，已在启动时 copy 到 $HOME/.termux-tools/
+        //   - proot.deb              ← proot 5.1.107-71 (aarch64)
+        //   - proot-distro.tar.gz    ← proot-distro 4.38.0 源码（shell 实现，最后一个 shell 版）
+        // 锁死版本避免被 apt upgrade 拉到上游 5.x（Python 重写，会破坏我们的 ProcessBuilder 调用）
         sb.append("auto_ok=1; ")
           .append("if ! command -v proot-distro >/dev/null 2>&1; then ")
-          .append("echo \"[*] Installing proot-distro...\"; ")
-          // 直接用 apt-get（而非 pkg），跳过 Termux 的镜像测速机制
-          // pkg update 会对所有已知镜像测速，在中国网络下全部超时；apt-get 只读 sources.list
-          .append("pkg_ok=0; ")
-          .append("for m in ").append(pkgMirrors).append("; do ")
-          .append("switch_pkg_mirror \"$m\"; ")
-          .append("echo \"[*] apt-get update...\"; ")
-          .append("apt-get update -y 2>&1 && ")
-          .append("echo \"[*] apt-get install proot-distro...\"; ")
-          .append("apt-get install -y proot-distro 2>&1 && { pkg_ok=1; break; }; ")
-          .append("echo \"[!] mirror $m failed, trying next...\"; ")
-          .append("done; ")
-          .append("[ \"$pkg_ok\" != \"1\" ] && { echo \"[!] proot-distro install failed.\"; auto_ok=0; }; ")
+          .append("echo \"[*] Installing bundled proot + proot-distro (static)...\"; ")
+          // 安装 proot 二进制（若 bootstrap 没带，或带的版本不够新）
+          .append("if [ -f \"$HOME/.termux-tools/proot.deb\" ]; then ")
+          .append("echo \"[*] dpkg -i proot.deb\"; ")
+          .append("dpkg -i \"$HOME/.termux-tools/proot.deb\" 2>&1 || { echo \"[!] proot install failed.\"; auto_ok=0; }; ")
+          .append("else echo \"[!] proot.deb missing, may rely on bootstrap version\"; fi; ")
+          // 安装 proot-distro（解 tar.gz 后跑 install.sh）
+          .append("if [ -f \"$HOME/.termux-tools/proot-distro.tar.gz\" ]; then ")
+          .append("echo \"[*] extract proot-distro tar.gz\"; ")
+          .append("pd_tmp=$(mktemp -d); ")
+          .append("if tar -xzf \"$HOME/.termux-tools/proot-distro.tar.gz\" -C \"$pd_tmp\" 2>&1; then ")
+          .append("pd_src=$(find \"$pd_tmp\" -maxdepth 2 -name install.sh -type f | head -1); ")
+          .append("if [ -n \"$pd_src\" ]; then ")
+          .append("(cd \"$(dirname \"$pd_src\")\" && bash install.sh) 2>&1 && echo \"[*] proot-distro installed.\" || { echo \"[!] install.sh failed.\"; auto_ok=0; }; ")
+          .append("else echo \"[!] install.sh not found in tarball.\"; auto_ok=0; fi; ")
+          .append("else echo \"[!] tar extract failed.\"; auto_ok=0; fi; ")
+          .append("rm -rf \"$pd_tmp\"; ")
+          .append("else echo \"[!] proot-distro.tar.gz missing.\"; auto_ok=0; fi; ")
           .append("fi; ");
 
         // ── Step 2: 安装 Ubuntu rootfs ────────────────────────────────────────
         sb.append("if [ \"$auto_ok\" = \"1\" ] && ")
           .append("[ ! -d \"$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu\" ]; then ")
           .append("echo \"[*] Installing Ubuntu...\"; ")
-          // 升级 proot 本体，修复旧版无法模拟 Ubuntu 25.10 新 syscall 导致的 signal 11 崩溃
-          .append("echo \"[*] Upgrading proot and proot-distro...\"; ")
-          .append("apt-get install -y --only-upgrade proot proot-distro 2>&1 || true; ")
-          // 修复 proot-distro 部分版本的 "cpu_arch: unbound variable" bug：
-          // 原因：proot-distro 在函数内用 local cpu_arch 声明变量，这会遮蔽父 shell export 的同名
-          // 环境变量；当架构未匹配时 cpu_arch 仍为 unset，加上 set -u 就会崩溃。
-          // 方案：直接从 proot-distro 的 set 选项中去掉 -u（nounset），使未赋值变量不致命。
+          // 不再 apt-get upgrade proot/proot-distro——版本已通过 assets 打包锁定
+          // proot-distro 4.38 自身仍有 "cpu_arch: unbound variable" bug，需要 patch
           .append("pd_bin=$(command -v proot-distro 2>/dev/null); ")
           .append("[ -n \"$pd_bin\" ] && [ -f \"$pd_bin\" ] && { ")
           .append("sed -i 's/set -euo/set -eo/g' \"$pd_bin\" 2>/dev/null; ")
