@@ -28,10 +28,13 @@ public class AutoUbuntuManager {
     private static final String[] SUPPORTED_EXTENSIONS = { ".tar.gz", ".tar.xz" };
 
     // ── 静态打包的 Termux 端依赖（脱离 apt 仓库，避免上游变更影响）─────────
+    /** APK 内 libtalloc deb 资产名（proot 的运行时依赖） */
+    private static final String LIBTALLOC_DEB_ASSET = "termux-tools/libtalloc_2.4.3_aarch64.deb";
     /** APK 内 proot deb 资产名（aarch64 only；其他架构未支持） */
     private static final String PROOT_DEB_ASSET   = "termux-tools/proot_5.1.107-71_aarch64.deb";
-    /** APK 内 proot-distro 源 tar.gz 资产名（shell 实现 v4.38.0，跨架构通用） */
-    private static final String PROOT_DISTRO_ASSET = "termux-tools/proot-distro-4.38.0.tar.gz";
+    /** APK 内 proot-distro 源 .tgz 资产名（shell 实现 v4.38.0，跨架构通用）
+     *  注意：用 .tgz 后缀而非 .tar.gz，避免 AAPT2 自动 gunzip 把 asset 改名 */
+    private static final String PROOT_DISTRO_ASSET = "termux-tools/proot-distro-4.38.0.tgz";
 
     // Ubuntu rootfs CDN 镜像（Ubuntu 的 rootfs 来自 Ubuntu 官方 CDN，不是 GitHub）
     // 清华/中科大均镜像了 ubuntu-cdimage，可直接替换域名
@@ -434,8 +437,9 @@ public class AutoUbuntuManager {
      */
     private void extractTermuxToolsToHome() {
         String home = TermuxConstants.TERMUX_HOME_DIR_PATH;
-        copyAsset(PROOT_DEB_ASSET,    home + "/.termux-tools/proot.deb");
-        copyAsset(PROOT_DISTRO_ASSET, home + "/.termux-tools/proot-distro.tar.gz");
+        copyAsset(LIBTALLOC_DEB_ASSET, home + "/.termux-tools/libtalloc.deb");
+        copyAsset(PROOT_DEB_ASSET,     home + "/.termux-tools/proot.deb");
+        copyAsset(PROOT_DISTRO_ASSET,  home + "/.termux-tools/proot-distro.tgz");
     }
 
     /** 把 asset 复制到目标路径（若大小一致跳过）。失败静默。 */
@@ -668,24 +672,28 @@ public class AutoUbuntuManager {
         // 锁死版本避免被 apt upgrade 拉到上游 5.x（Python 重写，会破坏我们的 ProcessBuilder 调用）
         sb.append("auto_ok=1; ")
           .append("if ! command -v proot-distro >/dev/null 2>&1; then ")
-          .append("echo \"[*] Installing bundled proot + proot-distro (static)...\"; ")
-          // 安装 proot 二进制（若 bootstrap 没带，或带的版本不够新）
+          .append("echo \"[*] Installing bundled libtalloc + proot + proot-distro (static)...\"; ")
+          // 安装顺序：libtalloc -> proot -> proot-distro（proot 依赖 libtalloc）
+          .append("if [ -f \"$HOME/.termux-tools/libtalloc.deb\" ]; then ")
+          .append("echo \"[*] dpkg -i libtalloc.deb\"; ")
+          .append("dpkg -i \"$HOME/.termux-tools/libtalloc.deb\" 2>&1 || echo \"[!] libtalloc install warning (may already be installed)\"; ")
+          .append("fi; ")
           .append("if [ -f \"$HOME/.termux-tools/proot.deb\" ]; then ")
           .append("echo \"[*] dpkg -i proot.deb\"; ")
           .append("dpkg -i \"$HOME/.termux-tools/proot.deb\" 2>&1 || { echo \"[!] proot install failed.\"; auto_ok=0; }; ")
           .append("else echo \"[!] proot.deb missing, may rely on bootstrap version\"; fi; ")
-          // 安装 proot-distro（解 tar.gz 后跑 install.sh）
-          .append("if [ -f \"$HOME/.termux-tools/proot-distro.tar.gz\" ]; then ")
-          .append("echo \"[*] extract proot-distro tar.gz\"; ")
+          // 安装 proot-distro（解 .tgz 后跑 install.sh）
+          .append("if [ -f \"$HOME/.termux-tools/proot-distro.tgz\" ]; then ")
+          .append("echo \"[*] extract proot-distro.tgz\"; ")
           .append("pd_tmp=$(mktemp -d); ")
-          .append("if tar -xzf \"$HOME/.termux-tools/proot-distro.tar.gz\" -C \"$pd_tmp\" 2>&1; then ")
+          .append("if tar -xzf \"$HOME/.termux-tools/proot-distro.tgz\" -C \"$pd_tmp\" 2>&1; then ")
           .append("pd_src=$(find \"$pd_tmp\" -maxdepth 2 -name install.sh -type f | head -1); ")
           .append("if [ -n \"$pd_src\" ]; then ")
           .append("(cd \"$(dirname \"$pd_src\")\" && bash install.sh) 2>&1 && echo \"[*] proot-distro installed.\" || { echo \"[!] install.sh failed.\"; auto_ok=0; }; ")
           .append("else echo \"[!] install.sh not found in tarball.\"; auto_ok=0; fi; ")
           .append("else echo \"[!] tar extract failed.\"; auto_ok=0; fi; ")
           .append("rm -rf \"$pd_tmp\"; ")
-          .append("else echo \"[!] proot-distro.tar.gz missing.\"; auto_ok=0; fi; ")
+          .append("else echo \"[!] proot-distro.tgz missing.\"; auto_ok=0; fi; ")
           .append("fi; ");
 
         // ── Step 2: 安装 Ubuntu rootfs ────────────────────────────────────────

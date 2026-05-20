@@ -78,7 +78,7 @@ public class UbuntuSnapshotManager {
      */
     public static boolean isHealthy() {
         try {
-            Process p = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+            Process p = new ProcessBuilder(PROOT_D, "login", "ubuntu",
                 "--user", "claude", "--", "sh", "-c", "claude --version")
                 .redirectErrorStream(true)
                 .start();

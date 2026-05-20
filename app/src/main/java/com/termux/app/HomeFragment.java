@@ -530,7 +530,7 @@ public class HomeFragment extends Fragment {
                         + " claude -p --output-format stream-json --verbose --dangerously-skip-permissions"
                         + sessionFlag + " 2>/dev/null";
 
-                ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu", "--user", "claude", "--", "sh", "-c", claudeCmd);
+                ProcessBuilder pb = new ProcessBuilder(PROOT_D, "login", "ubuntu", "--user", "claude", "--", "sh", "-c", claudeCmd);
                 setupEnv(pb.environment(), finalKey, finalBaseUrl);
                 pb.redirectErrorStream(false);
 
@@ -726,7 +726,7 @@ public class HomeFragment extends Fragment {
 
                 // --user claude: 与 sendOrConfirm 保持一致（claude -p 以 claude 用户运行）
                 // ~ 展开为 /home/claude/，文件落在 /home/claude/uploads/<uuid>/<filename>
-                ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+                ProcessBuilder pb = new ProcessBuilder(PROOT_D, "login", "ubuntu",
                     "--user", "claude",
                     "--bind", cacheFile.getAbsolutePath() + ":/tmp/.upload_src",
                     "--", "sh", "-c", shell);
@@ -1275,7 +1275,7 @@ public class HomeFragment extends Fragment {
     /** 清空整个 ~/uploads/ 内容（保留目录本身），用于"清空全部"按钮。 */
     private void clearUploadsRoot() {
         try {
-            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+            ProcessBuilder pb = new ProcessBuilder(PROOT_D, "login", "ubuntu",
                 "--user", "claude", "--", "sh", "-c",
                 "rm -rf ~/uploads/* ~/uploads/.[!.]*");
             setupEnv(pb.environment(), "", "");
@@ -1293,7 +1293,7 @@ public class HomeFragment extends Fragment {
             if (!safe.isEmpty()) sb.append(" ~/uploads/").append(safe);
         }
         try {
-            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+            ProcessBuilder pb = new ProcessBuilder(PROOT_D, "login", "ubuntu",
                 "--user", "claude", "--", "sh", "-c", sb.toString());
             setupEnv(pb.environment(), "", "");
             pb.start().waitFor();
@@ -1332,7 +1332,7 @@ public class HomeFragment extends Fragment {
         if (safe.isEmpty()) return;
         String shell = "rm -f ~/.claude/projects/-home-claude/" + safe + ".jsonl";
         try {
-            ProcessBuilder pb = new ProcessBuilder(BASH, PROOT_D, "login", "ubuntu",
+            ProcessBuilder pb = new ProcessBuilder(PROOT_D, "login", "ubuntu",
                 "--user", "claude", "--", "sh", "-c", shell);
             setupEnv(pb.environment(), "", "");
             pb.start().waitFor();
