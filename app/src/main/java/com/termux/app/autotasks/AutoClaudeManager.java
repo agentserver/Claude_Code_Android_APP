@@ -106,8 +106,9 @@ public class AutoClaudeManager {
 
         // ── Step 2: 安装 Node.js（系统 apt，Ubuntu 25.10 自带 22.x）──────────
         // 去掉管道过滤，让 apt 直接输出到终端，用户可以看到实时进度。
-        // 修复 snapshot-v2 打包时过度清理（find -delete 把空目录也清掉）导致 apt 报
-        // "Archives directory /var/cache/apt/archives/partial is missing"
+        // 兜底：旧 snapshot（v2 及之前）打包时 `rm -rf /var/lib/apt/lists/*` 会把
+        // partial/ 子目录一同删掉，apt 启动会报 "Archives directory ... is missing"。
+        // snapshot-v3 起 snapshot_ubuntu.sh 已修复源头，这里保留 mkdir 兼容旧包。
         s.append("mkdir -p /var/cache/apt/archives/partial /var/lib/apt/lists/partial /var/log/apt\n");
         s.append("chmod 700 /var/cache/apt/archives/partial /var/lib/apt/lists/partial 2>/dev/null || true\n");
         s.append("if ! command -v node >/dev/null 2>&1; then\n");

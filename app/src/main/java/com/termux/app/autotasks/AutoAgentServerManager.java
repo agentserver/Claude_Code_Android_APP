@@ -138,6 +138,10 @@ public class AutoAgentServerManager {
             String termuxHome = prefix + "/../home";
             final String finalPrefix = prefix;
 
+            // 注意：此脚本在 App 启动时跑，agentserver 大概率已经在后台运行。
+            // Android+proot 内核不强制 ETXTBSY，直接 cp 覆盖会"成功"但保留原 inode，
+            // 导致运行中进程的 mmap 被静默改写，下次 page-fault 时按新字节执行 → segfault。
+            // 用 mv（rename）做原子替换：换 inode，旧进程继续按旧 inode 执行，新进程走新二进制。
             String script =
                 "command -v proot-distro >/dev/null 2>&1 || exit 0\n" +
                 "proot-distro login ubuntu -- sh << 'INNER'\n" +
@@ -146,7 +150,7 @@ public class AutoAgentServerManager {
                 "  tar -xzf \"$_t/pkg.tgz\" -C \"$_t\" 2>/dev/null || { rm -rf \"$_t\"; exit 0; }\n" +
                 "  _b=$(find \"$_t\" -name agentserver -type f | head -1)\n" +
                 "  [ -n \"$_b\" ] || { rm -rf \"$_t\"; exit 0; }\n" +
-                "  cp \"$_b\" /usr/local/bin/agentserver && chmod +x /usr/local/bin/agentserver\n" +
+                "  cp \"$_b\" /usr/local/bin/agentserver.new && chmod +x /usr/local/bin/agentserver.new && mv -f /usr/local/bin/agentserver.new /usr/local/bin/agentserver\n" +
                 "  id claude >/dev/null 2>&1 || useradd -m -s /bin/bash claude\n" +
                 "  _cc=$(which claude 2>/dev/null); [ -n \"$_cc\" ] && [ ! -e /usr/local/bin/claude ] && ln -sf \"$_cc\" /usr/local/bin/claude\n" +
                 "  rm -rf \"$_t\"\n" +
@@ -209,15 +213,24 @@ public class AutoAgentServerManager {
         s.append("_download_url='https://github.com/agentserver/agentserver/releases/download/v0.48.1/agentserver-linux-arm64.tar.gz'\n");
         s.append("if [ ! -f \"$_tgz\" ]; then\n");
         s.append("    echo '[*] 本地安装包未找到，尝试从网络下载...'\n");
+        // 下载到 .part 文件，成功后再 mv 到最终路径；避免中断后留下半截 tgz
+        // 让下次运行误以为下载已完成、直接 tar 解压失败陷入死循环。
+        s.append("    _tgz_part=\"$_tgz.part\"\n");
+        s.append("    rm -f \"$_tgz_part\"\n");
         s.append("    if command -v curl >/dev/null 2>&1; then\n");
-        s.append("        curl -L --progress-bar -o \"$_tgz\" \"$_download_url\"\n");
+        s.append("        curl -fL --progress-bar -o \"$_tgz_part\" \"$_download_url\"\n");
         s.append("    elif command -v wget >/dev/null 2>&1; then\n");
-        s.append("        wget -O \"$_tgz\" \"$_download_url\"\n");
+        s.append("        wget -O \"$_tgz_part\" \"$_download_url\"\n");
         s.append("    else\n");
         s.append("        echo '[!] 未找到 curl 或 wget，请先安装：apt-get install -y curl'\n");
         s.append("        sed -i '/.agentserver-setup/d' ~/.bashrc 2>/dev/null\n");
         s.append("        rm -f ~/.agentserver-setup.sh\n");
         s.append("        return 1 2>/dev/null || exit 1\n");
+        s.append("    fi\n");
+        s.append("    if [ -s \"$_tgz_part\" ]; then\n");
+        s.append("        mv \"$_tgz_part\" \"$_tgz\"\n");
+        s.append("    else\n");
+        s.append("        rm -f \"$_tgz_part\"\n");
         s.append("    fi\n");
         s.append("fi\n");
         s.append("if [ ! -f \"$_tgz\" ]; then\n");
@@ -231,10 +244,12 @@ public class AutoAgentServerManager {
         // ── 解压并安装二进制 ──────────────────────────────────────────────────
         s.append("echo '[1/2] 正在解压 AgentServer...'\n");
         s.append("_tmpdir=$(mktemp -d)\n");
-        s.append("tar -xzf \"$_tgz\" -C \"$_tmpdir\" 2>&1\n");
-        s.append("if [ $? -ne 0 ]; then\n");
-        s.append("    echo '[!] 解压失败，请检查安装包完整性。'\n");
+        s.append("if ! tar -xzf \"$_tgz\" -C \"$_tmpdir\" 2>&1; then\n");
+        s.append("    echo '[!] 解压失败，安装包可能损坏。已清除以便下次重新下载。'\n");
+        // 同时删除损坏的 tgz，避免下次跑脚本时 [ ! -f \"$_tgz\" ] 判定为已存在，
+        // 跳过下载又再次解压失败，陷入死循环。
         s.append("    rm -rf \"$_tmpdir\"\n");
+        s.append("    rm -f \"$_tgz\"\n");
         s.append("    return 1 2>/dev/null || exit 1\n");
         s.append("fi\n\n");
 
@@ -243,13 +258,21 @@ public class AutoAgentServerManager {
         s.append("if [ -z \"$_bin\" ]; then\n");
         s.append("    echo '[!] 未在压缩包中找到 agentserver 二进制文件。'\n");
         s.append("    rm -rf \"$_tmpdir\"\n");
+        s.append("    rm -f \"$_tgz\"\n");
         s.append("    return 1 2>/dev/null || exit 1\n");
         s.append("fi\n\n");
 
         s.append("echo '[2/2] 正在安装到 /usr/local/bin/agentserver ...'\n");
         s.append("mkdir -p /usr/local/bin\n");
-        s.append("cp \"$_bin\" /usr/local/bin/agentserver\n");
-        s.append("chmod +x /usr/local/bin/agentserver\n");
+        // 原子替换：先 cp 到 .new，再 mv 覆盖（rename(2)）。
+        // 在 Android+proot 上，宿主内核不强制 ETXTBSY —— 对正在运行的 ELF 做
+        // cp 覆盖会"成功"但保留同一 inode，导致运行中进程的 mmap 文件被静默改写，
+        // 后续按需 page-fault 时会读到新二进制的字节 → 必然 segfault。
+        // mv（rename）会换 inode：运行中进程继续持有旧 inode（已无目录项但仍在磁盘上），
+        // 新连接走新 inode。安全且原子。
+        s.append("cp \"$_bin\" /usr/local/bin/agentserver.new\n");
+        s.append("chmod +x /usr/local/bin/agentserver.new\n");
+        s.append("mv -f /usr/local/bin/agentserver.new /usr/local/bin/agentserver\n");
         s.append("rm -rf \"$_tmpdir\"\n");
         s.append("rm -f \"$_tgz\"\n\n");
 

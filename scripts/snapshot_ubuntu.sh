@@ -35,7 +35,14 @@ set -e
 
 echo "  · apt 包缓存 + 索引..."
 apt-get clean -y 2>/dev/null || true
-rm -rf /var/lib/apt/lists/*
+# 只清内容、保留 partial/ 子目录及权限。
+# 直接 rm -rf /var/lib/apt/lists/* 会把 partial 子目录一起删掉，
+# 解压后首次 apt-get update 会报 "Archives directory ... is missing"。
+find /var/lib/apt/lists -mindepth 1 -maxdepth 1 ! -name partial -exec rm -rf {} +
+find /var/lib/apt/lists/partial -mindepth 1 -delete 2>/dev/null || true
+# 再保险：确保 apt 期望的两个 partial 目录及权限完好
+mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial
+chmod 700 /var/lib/apt/lists/partial /var/cache/apt/archives/partial
 
 echo "  · npm / pnpm 缓存..."
 npm cache clean --force 2>/dev/null || true
@@ -78,6 +85,25 @@ info "Step 2/3 — 统计 rootfs 大小"
 RAW_SIZE=$(du -sh "$ROOTFS" | cut -f1)
 RAW_BYTES=$(du -sb "$ROOTFS" | cut -f1)
 echo "  清理后原始大小：$RAW_SIZE"
+
+# ══════════════════════════════════════════════════════════
+# Step 2.5: 修复 mode-000 占位目录权限
+# ══════════════════════════════════════════════════════════
+# proot-distro 启动时用 --bind=/vendor --bind=/system 等把 Android 系统目录
+# 挂进 rootfs，需要 rootfs 里存在同名空目录作为挂载点。
+# 这些目录早期被创建为 mode 000（d---------），导致：
+#   1. tar 无法读取里面（即使是空的）→ 抛 "Cannot open: Permission denied"
+#   2. tar 跳过整个目录条目 → snapshot 里完全没有 /vendor /system 等
+#   3. 解压后再 proot login → --bind=/system 找不到目标 → 启动失败
+# 修复：snapshot 前把它们 chmod 755，让 tar 能正常包含为空目录条目。
+# 运行时的 mode 不影响 proot bind 行为（bind 覆盖底层目录的权限语义）。
+info "Step 2.5/3 — 修复 mode-000 占位目录权限"
+for d in apex odm product system system_ext vendor sdcard; do
+    if [ -d "$ROOTFS/$d" ]; then
+        chmod 755 "$ROOTFS/$d" 2>/dev/null || true
+    fi
+done
+ok "占位目录权限已规范化"
 
 # ══════════════════════════════════════════════════════════
 # Step 3: 打包压缩
