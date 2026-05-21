@@ -3,6 +3,8 @@ package com.termux.app;
 import android.app.Application;
 import android.content.Context;
 
+import androidx.appcompat.app.AppCompatDelegate;
+
 import com.termux.api.SocketListener;
 import com.termux.api.util.ResultReturner;
 import com.termux.BuildConfig;
@@ -17,8 +19,6 @@ import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.termux.shell.TermuxShellManager;
-import com.termux.shared.termux.theme.TermuxThemeUtils;
-
 public class TermuxApplication extends Application {
 
     private static final String LOG_TAG = "TermuxApplication";
@@ -48,8 +48,13 @@ public class TermuxApplication extends Application {
         ResultReturner.setContext(this);
         SocketListener.createSocketListener(this);
 
-        // Set NightMode.APP_NIGHT_MODE
-        TermuxThemeUtils.setAppNightMode(properties.getNightMode());
+        // 非终端 UI（HomeFragment / ApiKeyFragment / AgentServerFragment 等）的所有布局
+        // 都按浅色风格设计，硬编码了 #FFFFFF 背景 + #212121 文字 + MaterialButton 不显式
+        // 指定 textColor。系统进入 dark mode 时，MaterialButton 的文字会跟着主题翻成黑色
+        // → 黑底/浅底上看不到。终端区域有自己的配色方案（~/.termux/colors.properties），
+        // 与 AppCompat 主题无关，所以强制 MODE_NIGHT_NO 不影响终端外观。
+        // 注：这会让 termux.properties 里的 night-mode 设置失效，是设计取舍。
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
 
         // Check and create termux files directory. If failed to access it like in case of secondary
         // user or external sd card installation, then don't run files directory related code
