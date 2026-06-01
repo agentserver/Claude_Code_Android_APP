@@ -20,9 +20,11 @@ import java.util.List;
 /** RecyclerView Adapter，渲染用户消息（右侧蓝色气泡）和 Claude 回复（左侧灰色气泡）。 */
 public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
-    private static final int TYPE_USER = 0;
-    private static final int TYPE_ASSISTANT = 1;
-    private static final int TYPE_SYSTEM = 2;
+    private static final int TYPE_USER         = 0;
+    private static final int TYPE_ASSISTANT    = 1;
+    private static final int TYPE_SYSTEM       = 2;
+    private static final int TYPE_TOOL_USE     = 3;
+    private static final int TYPE_TOOL_RESULT  = 4;
 
     private final List<ChatMessage> mMessages;
 
@@ -37,9 +39,11 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @Override
     public int getItemViewType(int position) {
         switch (mMessages.get(position).type) {
-            case USER:      return TYPE_USER;
-            case SYSTEM:    return TYPE_SYSTEM;
-            default:        return TYPE_ASSISTANT;
+            case USER:         return TYPE_USER;
+            case SYSTEM:       return TYPE_SYSTEM;
+            case TOOL_USE:     return TYPE_TOOL_USE;
+            case TOOL_RESULT:  return TYPE_TOOL_RESULT;
+            default:           return TYPE_ASSISTANT;
         }
     }
 
@@ -51,6 +55,10 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             return new UserViewHolder(inflater.inflate(R.layout.item_msg_user, parent, false));
         } else if (viewType == TYPE_SYSTEM) {
             return new SystemViewHolder(inflater.inflate(R.layout.item_msg_system, parent, false));
+        } else if (viewType == TYPE_TOOL_USE) {
+            return new ToolViewHolder(inflater.inflate(R.layout.item_msg_tool_use, parent, false));
+        } else if (viewType == TYPE_TOOL_RESULT) {
+            return new ToolViewHolder(inflater.inflate(R.layout.item_msg_tool_result, parent, false));
         } else {
             return new AssistantViewHolder(inflater.inflate(R.layout.item_msg_assistant, parent, false));
         }
@@ -63,6 +71,8 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             ((UserViewHolder) holder).bind(msg.content);
         } else if (holder instanceof SystemViewHolder) {
             ((SystemViewHolder) holder).bind(msg.content);
+        } else if (holder instanceof ToolViewHolder) {
+            ((ToolViewHolder) holder).bind(msg, position, ChatAdapter.this);
         } else {
             ((AssistantViewHolder) holder).bind(msg);
         }
@@ -111,6 +121,55 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** 兼容旧调用（无思考内容）。 */
     public void updateLastAssistant(String content) {
         updateLastAssistant(content, null);
+    }
+
+    /** 仅更新最后一条 ASSISTANT 的正文（thinking 字段保留不动）。 */
+    public void updateLastAssistantText(String text) {
+        for (int i = mMessages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = mMessages.get(i);
+            if (msg.type == ChatMessage.Type.ASSISTANT) {
+                if (!java.util.Objects.equals(msg.content, text)) {
+                    msg.content = text;
+                    notifyItemChanged(i);
+                }
+                return;
+            }
+        }
+        // 没有 ASSISTANT 占位 → 创建一条
+        addMessage(ChatMessage.assistant(text));
+    }
+
+    /** 仅更新最后一条 ASSISTANT 的 thinking 字段。 */
+    public void updateLastAssistantThinking(String thinking) {
+        for (int i = mMessages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = mMessages.get(i);
+            if (msg.type == ChatMessage.Type.ASSISTANT) {
+                if (!java.util.Objects.equals(msg.thinking, thinking)) {
+                    msg.thinking = thinking;
+                    notifyItemChanged(i);
+                }
+                return;
+            }
+        }
+        // 没有 ASSISTANT 占位 → 用空 content 创建一条
+        ChatMessage m = ChatMessage.assistant("");
+        m.thinking = thinking;
+        addMessage(m);
+    }
+
+    /** 折叠当前 turn 内所有 TOOL_USE / TOOL_RESULT 气泡的详情区。 */
+    public void collapseAllToolDetailsInLastTurn() {
+        // 从末尾向前，直到遇到 USER 消息为止
+        for (int i = mMessages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = mMessages.get(i);
+            if (msg.type == ChatMessage.Type.USER) break;
+            if ((msg.type == ChatMessage.Type.TOOL_USE
+                    || msg.type == ChatMessage.Type.TOOL_RESULT)
+                    && !msg.toolDetailCollapsed) {
+                msg.toolDetailCollapsed = true;
+                notifyItemChanged(i);
+            }
+        }
     }
 
     /** 回复完成后，将最后一条 ASSISTANT 消息的思考内容折叠。 */
@@ -209,6 +268,39 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         void bind(String content) {
             mText.setText(content);
+        }
+    }
+
+    static class ToolViewHolder extends RecyclerView.ViewHolder {
+        private final TextView mHeader;
+        private final TextView mDetail;
+        private final View     mContainer;
+
+        ToolViewHolder(View itemView) {
+            super(itemView);
+            mContainer = itemView.findViewById(R.id.tool_container);
+            mHeader    = itemView.findViewById(R.id.tool_header);
+            mDetail    = itemView.findViewById(R.id.tool_detail);
+            itemView.setOnLongClickListener(v -> {
+                copyToClipboard(v, mHeader.getText() + "\n" + mDetail.getText());
+                return true;
+            });
+        }
+
+        void bind(ChatMessage msg, int position, ChatAdapter adapter) {
+            String triangle = msg.toolDetailCollapsed ? " ▶" : " ▼";
+            mHeader.setText(msg.content + triangle);
+            if (msg.toolDetail == null || msg.toolDetail.isEmpty()) {
+                mDetail.setVisibility(View.GONE);
+                mContainer.setOnClickListener(null);  // 无内容则不可点
+                return;
+            }
+            mDetail.setText(msg.toolDetail);
+            mDetail.setVisibility(msg.toolDetailCollapsed ? View.GONE : View.VISIBLE);
+            mContainer.setOnClickListener(v -> {
+                msg.toolDetailCollapsed = !msg.toolDetailCollapsed;
+                adapter.notifyItemChanged(position);
+            });
         }
     }
 
