@@ -904,14 +904,21 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    /** 删除当前 turn 范围内（USER 之后的）所有空的 / "…" 占位 ASSISTANT 气泡。
+     *  扫整个 turn 而不是只看末尾——打断时可能 system/tool_use 气泡已经追加到
+     *  placeholder 后面，仅检查末尾会漏。 */
     private void dropPlaceholder() {
-        if (!mMessages.isEmpty()) {
-            ChatMessage last = mMessages.get(mMessages.size() - 1);
-            if (last.type == ChatMessage.Type.ASSISTANT
-                    && (last.content.equals("…") || last.content.trim().isEmpty())) {
-                int idx = mMessages.size() - 1;
-                mMessages.remove(idx);
-                mAdapter.notifyItemRemoved(idx);
+        for (int i = mMessages.size() - 1; i >= 0; i--) {
+            ChatMessage m = mMessages.get(i);
+            if (m.type == ChatMessage.Type.USER) break;
+            if (m.type == ChatMessage.Type.ASSISTANT
+                    && (m.content == null
+                        || m.content.equals("…")
+                        || m.content.trim().isEmpty())
+                    // 不删带有 thinking 内容的占位（流式 thinking 阶段 content 还空）
+                    && (m.thinking == null || m.thinking.isEmpty())) {
+                mMessages.remove(i);
+                mAdapter.notifyItemRemoved(i);
             }
         }
     }
@@ -1679,15 +1686,17 @@ public class HomeFragment extends Fragment {
                     mAdapter.collapseAllToolDetailsInLastTurn();
                     mWaitingResponse = false;
 
-                    // 捕获 session_id：首次时绑定 + commit pending uploads + 刷抽屉
+                    // 捕获 session_id：首次时绑定 + commit pending uploads
                     if (sid != null && !sid.equals(mCurrentSessionId)) {
                         mCurrentSessionId = sid;
                         mUploadStore.commitPending(sid);
-                        refreshSessionDrawer();
                     }
                     // 每条 turn 都 add：SessionStore 按 id 去重，但会刷新 timestamp + preview
+                    // 每次都 refresh 抽屉，确保列表顺序/预览反映最新状态（修：之前只在首次
+                    // 捕获时刷新，导致后续轮次的更新在用户切走再回来前看不到）
                     if (sid != null) {
                         mSessionStore.add(sid, System.currentTimeMillis(), mLastSentText);
+                        refreshSessionDrawer();
                     }
                     updateStatus("● 就绪", 0xFF2E7D32);
                     FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
