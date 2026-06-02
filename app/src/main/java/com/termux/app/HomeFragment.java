@@ -1679,12 +1679,15 @@ public class HomeFragment extends Fragment {
                     mAdapter.collapseAllToolDetailsInLastTurn();
                     mWaitingResponse = false;
 
-                    // 捕获 session_id 并写入 SessionStore（首次或变化时）
+                    // 捕获 session_id：首次时绑定 + commit pending uploads + 刷抽屉
                     if (sid != null && !sid.equals(mCurrentSessionId)) {
                         mCurrentSessionId = sid;
                         mUploadStore.commitPending(sid);
-                        mSessionStore.add(sid, System.currentTimeMillis(), mLastSentText);
                         refreshSessionDrawer();
+                    }
+                    // 每条 turn 都 add：SessionStore 按 id 去重，但会刷新 timestamp + preview
+                    if (sid != null) {
+                        mSessionStore.add(sid, System.currentTimeMillis(), mLastSentText);
                     }
                     updateStatus("● 就绪", 0xFF2E7D32);
                     FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
@@ -1697,6 +1700,9 @@ public class HomeFragment extends Fragment {
             }
             @Override public void onProcessDied(String reason) {
                 mHandler.post(() -> {
+                    dropPlaceholder();
+                    mAdapter.collapseLastAssistantThinking();
+                    mAdapter.collapseAllToolDetailsInLastTurn();
                     mAdapter.addMessage(ChatMessage.system(
                             "● 进程已退出 (" + reason + ")，下条消息将自动恢复"));
                     mWaitingResponse = false;

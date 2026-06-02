@@ -158,8 +158,8 @@ public final class ClaudeStreamSession {
             mStdinWriter = new BufferedWriter(new OutputStreamWriter(mProcess.getOutputStream()));
             Log.i(TAG, "[gen " + gen + "] spawned"
                     + (resumeSid != null ? " --resume " + resumeSid : " (new session)"));
-            startStdoutThread(gen);
-            startStderrThread(gen);
+            startStdoutThread(gen, mProcess);
+            startStderrThread(gen, mProcess);
             return true;
         } catch (Exception e) {
             Log.e(TAG, "spawn failed", e);
@@ -177,29 +177,30 @@ public final class ClaudeStreamSession {
 
     /** SIGTERM 然后 1 秒后升级 SIGKILL；清状态。 */
     private void killProcess(String reason) {
-        Process p = mProcess;
+        final Process p = mProcess;
         if (p == null) {
             mState = State.IDLE;
             return;
         }
         mGeneration++;  // invalidate stale stdout events
-        try {
-            p.destroy();
-            // 等 1 秒；不阻塞 UI 线程（killProcess 在已经被 synchronized 包住的调用里，
-            // 通常来自 UI 线程，但 1s 等待对 UI 影响可接受；后续可改为 worker 线程）
-            if (!p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
-                Log.w(TAG, "SIGTERM didn't kill, escalating to SIGKILL");
-                p.destroyForcibly();
-            }
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-        }
         mProcess = null;
         mStdinWriter = null;
         mState = State.IDLE;
         mEmittedToolUseIds.clear();
         mToolNameById.clear();
         Log.i(TAG, "killed: " + reason);
+        // 先快速 SIGTERM（同步），1s 等待 + SIGKILL 升级放后台线程，避免 UI 卡顿
+        p.destroy();
+        new Thread(() -> {
+            try {
+                if (!p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                    Log.w(TAG, "SIGTERM didn't kill, escalating to SIGKILL");
+                    p.destroyForcibly();
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }, "ClaudeStream-kill").start();
     }
 
     // ── Stdin ────────────────────────────────────────────────────────────────
@@ -224,15 +225,18 @@ public final class ClaudeStreamSession {
             w.flush();
         } catch (Exception e) {
             Log.e(TAG, "writeUserMessage failed", e);
+            mState = State.IDLE;
+            mProcess = null;
+            mStdinWriter = null;
             emitProcessDied("stdin write failed: " + e.getMessage());
         }
     }
 
     // ── Stdout / stderr ──────────────────────────────────────────────────────
 
-    private void startStdoutThread(final int gen) {
+    private void startStdoutThread(final int gen, final Process p) {
         mStdoutThread = new Thread(() -> {
-            BufferedReader r = new BufferedReader(new InputStreamReader(mProcess.getInputStream()));
+            BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
             try {
                 String line;
                 while ((line = r.readLine()) != null) {
@@ -250,7 +254,7 @@ public final class ClaudeStreamSession {
             // Reader EOF → process died
             if (gen == mGeneration) {
                 try {
-                    int code = mProcess != null ? mProcess.waitFor() : -1;
+                    int code = p.waitFor();
                     Log.i(TAG, "[gen " + gen + "] process exited code=" + code);
                     mState = State.IDLE;
                     mProcess = null;
@@ -265,9 +269,9 @@ public final class ClaudeStreamSession {
         mStdoutThread.start();
     }
 
-    private void startStderrThread(final int gen) {
+    private void startStderrThread(final int gen, final Process p) {
         mStderrThread = new Thread(() -> {
-            BufferedReader r = new BufferedReader(new InputStreamReader(mProcess.getErrorStream()));
+            BufferedReader r = new BufferedReader(new InputStreamReader(p.getErrorStream()));
             try {
                 String line;
                 while ((line = r.readLine()) != null) {
