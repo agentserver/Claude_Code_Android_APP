@@ -78,6 +78,10 @@ public class TermuxApplication extends Application {
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
 
+        // Initialise the singleton subprocess wrapper for HomeFragment chat.
+        // No subprocess is spawned here; lazy on first send().
+        ClaudeStreamSession.init(this);
+
         if (isTermuxFilesDirectoryAccessible) {
             TermuxShellEnvironment.writeEnvironmentToFile(this);
         }
