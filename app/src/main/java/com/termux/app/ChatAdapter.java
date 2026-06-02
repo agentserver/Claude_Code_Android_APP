@@ -282,7 +282,12 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             mHeader    = itemView.findViewById(R.id.tool_header);
             mDetail    = itemView.findViewById(R.id.tool_detail);
             itemView.setOnLongClickListener(v -> {
-                copyToClipboard(v, mHeader.getText() + "\n" + mDetail.getText());
+                CharSequence detail = (mDetail.getVisibility() == View.VISIBLE)
+                        ? mDetail.getText() : null;
+                String full = (detail == null || detail.length() == 0)
+                        ? mHeader.getText().toString()
+                        : mHeader.getText() + "\n" + detail;
+                copyToClipboard(v, full);
                 return true;
             });
         }
@@ -298,8 +303,10 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             mDetail.setText(msg.toolDetail);
             mDetail.setVisibility(msg.toolDetailCollapsed ? View.GONE : View.VISIBLE);
             mContainer.setOnClickListener(v -> {
+                int pos = getAdapterPosition();
+                if (pos == RecyclerView.NO_POSITION) return;
                 msg.toolDetailCollapsed = !msg.toolDetailCollapsed;
-                adapter.notifyItemChanged(position);
+                adapter.notifyItemChanged(pos);
             });
         }
     }
