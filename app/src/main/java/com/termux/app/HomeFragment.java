@@ -30,6 +30,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
 import com.termux.R;
+import com.termux.app.automation.AndroidMcpActionRunner;
+import com.termux.app.automation.AutomationRuntime;
+import com.termux.app.automation.AutomationStore;
+import com.termux.app.automation.BoostExecutor;
+import com.termux.app.automation.ToolTraceStore;
 import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONArray;
@@ -166,6 +171,10 @@ public class HomeFragment extends Fragment {
     private volatile boolean                mViewActive = false;
     /** 最近一条用户消息文字，onResult 写 SessionStore preview 时用。 */
     private String mLastSentText = "";
+    private com.termux.app.automation.AutomationRuntime mAutomationRuntime;
+    private long mAutomationTurnStartMs = 0L;
+    private volatile boolean mBoosting = false;
+    private volatile int mBoostGeneration = 0;
 
     // ── 对话状态 ───────────────────────────────────────────────────────────
     private boolean mWaitingResponse = false;
@@ -403,6 +412,7 @@ public class HomeFragment extends Fragment {
         // "新建对话"：杀进程 + 清状态 + 清 UI，开始全新对话
         btnNewSession.setOnClickListener(v -> {
             mUiGeneration++;
+            cancelAutomationBoost();
             if (mProvider == AssistantProvider.CODEX) {
                 mCodexSession.resetForNewConversation();
             } else {
@@ -450,6 +460,12 @@ public class HomeFragment extends Fragment {
         mClaudeSession = ClaudeStreamSession.get(requireContext());
         mClaudeListener = buildClaudeListener();
         mClaudeSession.addListener(mClaudeListener);
+        AutomationStore automationStore = new AutomationStore(requireContext());
+        ToolTraceStore traceStore = new ToolTraceStore(requireContext());
+        BoostExecutor boostExecutor = new BoostExecutor(
+            new AndroidMcpActionRunner(requireContext()), automationStore);
+        mAutomationRuntime = new AutomationRuntime(
+            requireContext(), automationStore, traceStore, boostExecutor);
         restoreCodexTranscriptIfNeeded();
 
         // 悬浮窗权限检查：未授权时点击状态栏跳转设置
@@ -489,6 +505,7 @@ public class HomeFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        cancelAutomationBoost();
         mViewActive = false;
         mUiGeneration++;
         mViewGeneration++;
@@ -516,7 +533,8 @@ public class HomeFragment extends Fragment {
             return;
         }
 
-        String text = mInputEdit.getText().toString().trim();
+        String typed = mInputEdit.getText().toString().trim();
+        String text = typed;
         if (text.isEmpty() && mAttachmentPath == null) { terminal("\r"); return; }
 
         // 有附件时拼接文件引用（附件路径 + 用户文字）
@@ -525,8 +543,25 @@ public class HomeFragment extends Fragment {
         if (pendingPath != null) {
             text = "[附件: " + pendingPath + "]\n" + text;
         }
+
+        // 用于 UI 显示的简洁文本（不含路径）
+        String displayText = (typed.isEmpty() && pendingName != null)
+                ? "[📎 " + pendingName + "]"
+                : typed;
+        if (pendingPath != null && !typed.isEmpty()) {
+            displayText = "[📎 " + pendingName + "] " + typed;
+        }
         clearAttachment();
 
+        if (pendingPath == null && mAutomationRuntime != null && tryBoost(text, displayText)) {
+            mInputEdit.setText("");
+            return;
+        }
+
+        sendToProvider(text, displayText);
+    }
+
+    private void sendToProvider(String text, String displayText) {
         // 检查 API Key
         ProviderProfile profile = ProviderProfile.forProvider(mProvider);
         ApiKeyStore store = new ApiKeyStore(requireContext(), mProvider);
@@ -537,14 +572,6 @@ public class HomeFragment extends Fragment {
             for (ApiKeyStore.Entry e : store.loadAll()) {
                 if (e.id.equals(activeId)) { apiKey = e.value; baseUrl = e.baseUrl; break; }
             }
-        }
-        // 用于 UI 显示的简洁文本（不含路径）
-        String typed = mInputEdit.getText().toString().trim();
-        String displayText = (typed.isEmpty() && pendingName != null)
-                ? "[📎 " + pendingName + "]"
-                : typed;
-        if (pendingPath != null && !typed.isEmpty()) {
-            displayText = "[📎 " + pendingName + "] " + typed;
         }
         if (apiKey == null || apiKey.isEmpty()) {
             mAdapter.addMessage(ChatMessage.user(displayText));
@@ -575,6 +602,7 @@ public class HomeFragment extends Fragment {
         mLastSentText = text;
         appendChatLog("你", text);
 
+        mAutomationTurnStartMs = mAutomationRuntime != null ? mAutomationRuntime.markTurnStarted() : 0L;
         if (mProvider == AssistantProvider.CODEX) {
             mCodexSession.send(text, apiKey, baseUrl);
         } else {
@@ -582,8 +610,73 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    private boolean tryBoost(String text, String displayText) {
+        final int generation = ++mBoostGeneration;
+        BoostExecutor.Callback callback = new BoostExecutor.Callback() {
+            @Override
+            public void onStep(String recipeName, int index, int total, String toolName) {
+                if (generation != mBoostGeneration) return;
+                mBoosting = true;
+                mHandler.post(() -> {
+                    if (!isCurrentAutomationBoost(generation)) return;
+                    String status = "⚡ Boosting " + index + "/" + total;
+                    updateStatus(status, 0xFF7B1FA2);
+                    FloatingStatusService.updateBoostStatus(status, 0xFF7B1FA2, displayText, true);
+                });
+            }
+
+            @Override
+            public void onCompleted(String recipeName) {
+                mHandler.post(() -> {
+                    if (!isCurrentAutomationBoost(generation)) return;
+                    mBoosting = false;
+                    mTurnOutputAnchored = false;
+                    mAdapter.addMessage(ChatMessage.user(displayText));
+                    mAdapter.addMessage(ChatMessage.assistant("已通过 Automation Boost 完成：" + recipeName));
+                    updateStatus("● 就绪", 0xFF2E7D32);
+                    FloatingStatusService.updateBoostStatus("● Boost completed", 0xFF2E7D32, displayText, false);
+                    scrollToCurrentTurnOutputStartOnce();
+                });
+            }
+
+            @Override
+            public void onFailed(String recipeName, String reason) {
+                mHandler.post(() -> {
+                    if (!isCurrentAutomationBoost(generation)) return;
+                    mBoosting = false;
+                    FloatingStatusService.updateBoostStatus("● Boost failed", 0xFFD32F2F, displayText, false);
+                    sendToProvider(text, displayText);
+                });
+            }
+        };
+        boolean started = mAutomationRuntime.tryStartBoost(text, callback);
+        if (started) {
+            mBoosting = true;
+        }
+        return started;
+    }
+
+    private boolean isCurrentAutomationBoost(int generation) {
+        return mBoosting
+            && generation == mBoostGeneration
+            && mViewActive
+            && mAdapter != null;
+    }
+
+    private void cancelAutomationBoost() {
+        mBoostGeneration++;
+        mBoosting = false;
+        clearAutomationTurnTracking();
+        FloatingStatusService.updateBoostStatus("● 就绪", 0xFF2E7D32, "", false);
+    }
+
+    private void clearAutomationTurnTracking() {
+        mAutomationTurnStartMs = 0L;
+    }
+
     /** "打断" 按钮调用：SIGTERM 当前 turn，currentSid 保留，下条消息 --resume 续接。 */
     private void stopClaudeProcess() {
+        cancelAutomationBoost();
         stopActiveProviderProcess();
         mWaitingResponse = false;
         updateStatus("● 就绪", 0xFF2E7D32);
@@ -629,6 +722,7 @@ public class HomeFragment extends Fragment {
     private void switchProvider(AssistantProvider next) {
         if (next == null) next = AssistantProvider.CLAUDE;
         mUiGeneration++;
+        cancelAutomationBoost();
         resetAllProviderConversations();
         mProvider = next;
         if (mProviderStore != null) mProviderStore.setSelectedProvider(next);
@@ -655,7 +749,8 @@ public class HomeFragment extends Fragment {
     }
 
     private boolean isAnyProviderBusy() {
-        return mWaitingResponse
+        return mBoosting
+            || mWaitingResponse
             || (mClaudeSession != null && mClaudeSession.isWaitingResponse())
             || (mCodexSession != null && mCodexSession.isRunning());
     }
@@ -669,6 +764,7 @@ public class HomeFragment extends Fragment {
     }
 
     private void resetAllProviderConversations() {
+        cancelAutomationBoost();
         if (mClaudeSession != null) mClaudeSession.resetForNewConversation();
         if (mCodexSession != null) mCodexSession.resetForNewConversation();
     }
@@ -1864,6 +1960,17 @@ public class HomeFragment extends Fragment {
         return "";
     }
 
+    private void generateAutomationCandidateForCompletedTurn(String sourceTaskId) {
+        if (mAutomationRuntime == null || mAutomationTurnStartMs <= 0) return;
+        final long startMs = mAutomationTurnStartMs;
+        final long endMs = System.currentTimeMillis();
+        final String prompt = mLastSentText;
+        final String taskId = sourceTaskId == null ? "" : sourceTaskId;
+        clearAutomationTurnTracking();
+        new Thread(() -> mAutomationRuntime.generateCandidateForCompletedTurn(
+            prompt, taskId, startMs, endMs), "automation-candidate").start();
+    }
+
     // =========================================================================
     // ClaudeStreamSession listener — all callbacks fire on stdout reader
     // thread; we marshal each to the UI thread via mHandler.post.
@@ -1907,9 +2014,12 @@ public class HomeFragment extends Fragment {
             @Override public void onResult(boolean isError, String errMsg) {
                 postProviderUi(AssistantProvider.CODEX, viewGeneration, () -> {
                     if (isError) {
+                        clearAutomationTurnTracking();
                         mAdapter.updateLastAssistantText("⚠ " + errMsg);
                     } else {
                         dropPlaceholder();
+                        generateAutomationCandidateForCompletedTurn(
+                            mCurrentSessionId != null ? mCurrentSessionId : "");
                     }
                     mAdapter.collapseLastAssistantThinking();
                     mWaitingResponse = false;
@@ -1961,6 +2071,7 @@ public class HomeFragment extends Fragment {
             @Override public void onResult(String sid, boolean isError, String errMsg) {
                 postProviderUi(AssistantProvider.CLAUDE, viewGeneration, () -> {
                     if (isError) {
+                        clearAutomationTurnTracking();
                         mAdapter.updateLastAssistantText("⚠ " + errMsg);
                     } else {
                         // 占位 "…" 被流式 text 已经覆盖；若没有任何 text（极少见，全 tool 调用），
@@ -1983,6 +2094,9 @@ public class HomeFragment extends Fragment {
                         mSessionStore.add(sid, System.currentTimeMillis(), mLastSentText);
                         refreshSessionDrawer();
                     }
+                    if (!isError) {
+                        generateAutomationCandidateForCompletedTurn(sid);
+                    }
                     updateStatus("● 就绪", 0xFF2E7D32);
                     FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
                     // 写聊天日志（沿用旧路径，让 Termux tab 仍能 tail -f）
@@ -1994,6 +2108,7 @@ public class HomeFragment extends Fragment {
             }
             @Override public void onProcessDied(String reason) {
                 postProviderUi(AssistantProvider.CLAUDE, viewGeneration, () -> {
+                    clearAutomationTurnTracking();
                     dropPlaceholder();
                     mAdapter.collapseLastAssistantThinking();
                     mAdapter.collapseAllToolDetailsInLastTurn();

@@ -10,7 +10,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(RobolectricTestRunner.class)
 public class AutomationRuntimeTest {
@@ -115,6 +119,76 @@ public class AutomationRuntimeTest {
         Assert.assertTrue(started <= after);
     }
 
+    @Test
+    public void tryStartBoostReturnsFalseWhenGlobalDisabledOrNotWhitelisted() {
+        Context context = cleanContext();
+        AutomationStore store = new AutomationStore(context);
+        AutomationSettingsStore settings = new AutomationSettingsStore(context);
+        ActionRecipe recipe = recipe("recipe-boost", "Open Network", "com.android.settings", "open network");
+        store.saveRecipes(Collections.singletonList(recipe));
+        AutomationRuntime runtime = new AutomationRuntime(
+            context, store, new ToolTraceStore(context), new BoostExecutor(new FakeRunner(), store));
+
+        Assert.assertFalse(runtime.tryStartBoost("open network", BoostExecutor.Callback.NOOP));
+
+        settings.setBoostEnabled(true);
+        Assert.assertFalse(runtime.tryStartBoost("open network", BoostExecutor.Callback.NOOP));
+
+        settings.setRecipeWhitelisted(recipe.id, true);
+        Assert.assertFalse(runtime.tryStartBoost("open network", BoostExecutor.Callback.NOOP));
+    }
+
+    @Test
+    public void tryStartBoostReturnsTrueAndExecutesMatchingWhitelistedRecipe() throws Exception {
+        Context context = cleanContext();
+        AutomationStore store = new AutomationStore(context);
+        AutomationSettingsStore settings = new AutomationSettingsStore(context);
+        ActionRecipe recipe = recipe("recipe-boost", "Open Network", "com.android.settings", "open network");
+        store.saveRecipes(Collections.singletonList(recipe));
+        settings.setBoostEnabled(true);
+        settings.setRecipeWhitelisted(recipe.id, true);
+        settings.setAppWhitelisted(recipe.targetPackage, true);
+        FakeRunner runner = new FakeRunner();
+        AutomationRuntime runtime = new AutomationRuntime(
+            context, store, new ToolTraceStore(context), new BoostExecutor(runner, store));
+        CountDownLatch completed = new CountDownLatch(1);
+
+        boolean started = runtime.tryStartBoost("Please OPEN NETWORK now", new BoostExecutor.Callback() {
+            @Override
+            public void onStep(String recipeName, int index, int total, String toolName) {
+            }
+
+            @Override
+            public void onCompleted(String recipeName) {
+                completed.countDown();
+            }
+
+            @Override
+            public void onFailed(String recipeName, String reason) {
+            }
+        });
+
+        Assert.assertTrue(started);
+        Assert.assertTrue(completed.await(2, TimeUnit.SECONDS));
+        Assert.assertEquals(Collections.singletonList("step-1"), runner.stepIds);
+    }
+
+    @Test
+    public void tryStartBoostReturnsFalseWhenPromptDoesNotMatch() {
+        Context context = cleanContext();
+        AutomationStore store = new AutomationStore(context);
+        AutomationSettingsStore settings = new AutomationSettingsStore(context);
+        ActionRecipe recipe = recipe("recipe-boost", "Open Network", "com.android.settings", "open network");
+        store.saveRecipes(Collections.singletonList(recipe));
+        settings.setBoostEnabled(true);
+        settings.setRecipeWhitelisted(recipe.id, true);
+        settings.setAppWhitelisted(recipe.targetPackage, true);
+        AutomationRuntime runtime = new AutomationRuntime(
+            context, store, new ToolTraceStore(context), new BoostExecutor(new FakeRunner(), store));
+
+        Assert.assertFalse(runtime.tryStartBoost("open bluetooth", BoostExecutor.Callback.NOOP));
+    }
+
     private static ToolTraceEvent trace(String id, long timestampMs, String taskId, String toolName,
                                         JSONObject arguments, boolean success, String resultSummary,
                                         String packageName, String activityName) {
@@ -122,9 +196,32 @@ public class AutomationRuntimeTest {
             resultSummary, packageName, activityName);
     }
 
+    private static ActionRecipe recipe(String id, String name, String targetPackage, String intentPattern) {
+        ActionStep step = new ActionStep("step-1", "ui.click_text",
+            textArgs("Network"), Collections.<UiSelector>emptyList(),
+            ScreenFingerprint.empty(), ScreenFingerprint.empty(), 1000, "");
+        ScreenFingerprint end = new ScreenFingerprint(targetPackage, ".Settings",
+            Arrays.asList("Network"), 1, 0, "");
+        return new ActionRecipe(id, name, true, true, AutomationRiskLevel.LOW,
+            Arrays.asList(intentPattern), targetPackage, ".Settings",
+            ScreenFingerprint.empty(), end, Collections.singletonList(step), "test",
+            Collections.<String>emptyList(), RecipeStats.empty(), "v1", null);
+    }
+
+    private static JSONObject textArgs(String text) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("text", text);
+        } catch (Exception ignored) {
+        }
+        return json;
+    }
+
     private static Context cleanContext() {
         Context context = RuntimeEnvironment.getApplication();
         deleteDir(new File(context.getFilesDir(), "automation"));
+        context.getSharedPreferences(AutomationSettingsStore.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().clear().commit();
         return context;
     }
 
@@ -135,5 +232,24 @@ public class AutomationRuntimeTest {
             if (children != null) for (File child : children) deleteDir(child);
         }
         file.delete();
+    }
+
+    private static final class FakeRunner implements AndroidActionRunner {
+        final List<String> stepIds = new java.util.ArrayList<>();
+
+        @Override
+        public void runStep(ActionStep step) {
+            stepIds.add(step.id);
+        }
+
+        @Override
+        public ScreenFingerprint currentFingerprint() {
+            return ScreenFingerprint.empty();
+        }
+
+        @Override
+        public boolean matches(ScreenFingerprint expected) {
+            return true;
+        }
     }
 }

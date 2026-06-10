@@ -3,6 +3,7 @@ package com.termux.app.automation;
 import android.content.Context;
 
 import java.util.List;
+import java.util.Locale;
 
 public final class AutomationRuntime {
 
@@ -46,6 +47,39 @@ public final class AutomationRuntime {
     }
 
     public boolean tryStartBoost(String prompt, BoostExecutor.Callback callback) {
+        if (context == null || store == null || executor == null) return false;
+
+        AutomationSettingsStore settings = new AutomationSettingsStore(context);
+        if (!settings.isBoostEnabled()) return false;
+
+        List<ActionRecipe> recipes = store.loadRecipes();
+        for (ActionRecipe recipe : recipes) {
+            if (!AutomationPolicy.canAutoBoost(recipe)) continue;
+            if (!settings.isRecipeWhitelisted(recipe.id)) continue;
+            if (!settings.isAppWhitelisted(recipe.targetPackage)) continue;
+            if (!matchesPrompt(prompt, recipe.intentPatterns)) continue;
+
+            Thread thread = new Thread(() -> executor.execute(recipe, callback), "automation-boost");
+            thread.start();
+            return true;
+        }
         return false;
+    }
+
+    private boolean matchesPrompt(String prompt, List<String> intentPatterns) {
+        String normalizedPrompt = normalize(prompt);
+        if (normalizedPrompt.isEmpty() || intentPatterns == null) return false;
+        for (String pattern : intentPatterns) {
+            String normalizedPattern = normalize(pattern);
+            if (!normalizedPattern.isEmpty() && normalizedPrompt.contains(normalizedPattern)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalize(String value) {
+        if (value == null) return "";
+        return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     }
 }
