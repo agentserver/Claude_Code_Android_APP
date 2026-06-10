@@ -3,6 +3,9 @@ package com.termux.app.mcp;
 import android.content.Context;
 import android.util.Log;
 
+import com.termux.app.automation.ToolTraceEvent;
+import com.termux.app.automation.ToolTraceStore;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -16,6 +19,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * MCP Streamable HTTP server on 127.0.0.1:8765.
@@ -36,6 +40,7 @@ public class McpHttpServer {
 
     private final Context mContext;
     private final AuditLogger mAudit;
+    private final ToolTraceStore mTraceStore;
     private final List<McpTool> mTools = new ArrayList<>();
 
     private volatile boolean mRunning = false;
@@ -44,6 +49,7 @@ public class McpHttpServer {
     public McpHttpServer(Context context, AuditLogger audit) {
         mContext = context.getApplicationContext();
         mAudit   = audit;
+        mTraceStore = new ToolTraceStore(mContext);
     }
 
     public void registerTool(McpTool tool) {
@@ -245,6 +251,7 @@ public class McpHttpServer {
             contentStr = errorContent("Tool error: " + e.getMessage());
         }
         mAudit.log(toolName, taskId, success, success ? null : contentStr);
+        appendToolTrace(toolName, args, taskId, success, contentStr);
 
         JSONObject result = new JSONObject();
         result.put("content", new JSONArray(contentStr));
@@ -261,6 +268,34 @@ public class McpHttpServer {
             if (t.getName().equals(name)) return t;
         }
         return null;
+    }
+
+    private void appendToolTrace(String toolName, JSONObject args, String taskId, boolean success, String contentStr) {
+        try {
+            String packageName = "";
+            String activityName = "";
+            if (McpAccessibilityService.isRunning()) {
+                McpAccessibilityService service = McpAccessibilityService.getInstance();
+                if (service != null) {
+                    packageName = service.getCurrentPackage();
+                    activityName = service.getCurrentActivity();
+                }
+            }
+            ToolTraceEvent event = new ToolTraceEvent(UUID.randomUUID().toString(), System.currentTimeMillis(),
+                taskId, toolName, args, success, summarizeTraceResult(contentStr), packageName, activityName);
+            mTraceStore.append(event);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to append tool trace", e);
+        }
+    }
+
+    private static String summarizeTraceResult(String contentStr) {
+        if (contentStr == null) return "";
+        String summary = contentStr.replace('\n', ' ').replace('\r', ' ').trim();
+        if (summary.length() > 240) {
+            return summary.substring(0, 237) + "...";
+        }
+        return summary;
     }
 
     private static String successResponse(Object id, JSONObject result) throws Exception {
