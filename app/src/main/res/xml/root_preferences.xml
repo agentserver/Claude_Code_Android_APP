@@ -1,6 +1,12 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
+        app:key="automation_boost"
+        app:title="@string/automation_boost_preferences_title"
+        app:summary="@string/automation_boost_preferences_summary"
+        app:persistent="false"/>
+
+    <Preference
         app:key="termux"
         app:title="@string/termux_preferences_title"
         app:summary="@string/termux_preferences_summary"

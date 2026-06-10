@@ -59,6 +59,7 @@ public class SettingsActivity extends AppCompatActivity {
             if (context == null) return;
 
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+            configureAutomationBoostPreference();
 
             new Thread() {
                 @Override
@@ -71,6 +72,20 @@ public class SettingsActivity extends AppCompatActivity {
                     configureDonatePreference(context);
                 }
             }.start();
+        }
+
+        private void configureAutomationBoostPreference() {
+            Preference automationPreference = findPreference("automation_boost");
+            if (automationPreference != null) {
+                automationPreference.setOnPreferenceClickListener(preference -> {
+                    getParentFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.settings, new com.termux.app.AutomationSettingsFragment())
+                        .addToBackStack("automation_boost")
+                        .commit();
+                    return true;
+                });
+            }
         }
 
         private void configureTermuxAPIPreference(@NonNull Context context) {

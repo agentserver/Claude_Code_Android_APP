@@ -145,6 +145,16 @@
     <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
     <string name="termux_preferences_summary">Preferences for &TERMUX_APP_NAME; app</string>
 
+    <string name="automation_boost_preferences_title">Automation Boost</string>
+    <string name="automation_boost_preferences_summary">Manage fast paths, app whitelist, and learned action recipes</string>
+    <string name="automation_boost_global_enabled">Enable Automation Boost</string>
+    <string name="automation_boost_candidates">Candidate recipes</string>
+    <string name="automation_boost_recipes">Enabled recipes</string>
+    <string name="automation_boost_failures">Recent failures</string>
+    <string name="automation_boost_empty_candidates">No candidate recipes yet</string>
+    <string name="automation_boost_empty_recipes">No enabled recipes yet</string>
+    <string name="automation_boost_empty_failures">No Boost failures recorded</string>
+
         <!-- Debugging Preferences -->
         <string name="termux_debugging_preferences_title">Debugging</string>
         <string name="termux_debugging_preferences_summary">Preferences for debugging</string>
