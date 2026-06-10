@@ -27,6 +27,7 @@ public class FloatingStatusService extends Service {
 
     private WindowManager mWindowManager;
     private View          mFloatingView;
+    private TextView      mTitleText;
     private TextView      mStatusText;
     private TextView      mPreviewText;
 
@@ -37,6 +38,8 @@ public class FloatingStatusService extends Service {
     // 与 Activity 真实生命周期不同步（早期版本用 mInBackground 缓存，存在前台仍显示的 bug）
     private static volatile boolean sIsBusy      = false;
     private static volatile boolean sUserClosed  = false;
+    private static volatile String  sPendingTitle = "Claude Code";
+    private static volatile boolean sForceVisible = false;
 
     // 最新状态缓存（Service 可能在 SHOW 前就收到更新）
     private static volatile String sPendingStatus  = "● 等待中";
@@ -51,12 +54,32 @@ public class FloatingStatusService extends Service {
      * busy 从 false→true 的边沿会重置 sUserClosed（让新任务能再次弹出）。
      */
     public static void updateStatus(String status, int color, String preview, boolean isBusy) {
+        updateStatusInternal(status, color, preview, isBusy, false, "Claude Code", false);
+    }
+
+    /** 兼容旧 3 参形式：默认认为是 idle 更新（busy=false）。 */
+    public static void updateStatus(String status, int color, String preview) {
+        updateStatus(status, color, preview, false);
+    }
+
+    public static void updateBoostStatus(String status, int color, String preview, boolean active) {
+        if (active) {
+            updateStatusInternal(status, color, preview, true, true, "Automation Boost", true);
+        } else {
+            updateStatusInternal(status, color, preview, false, false, "Claude Code", false);
+        }
+    }
+
+    private static void updateStatusInternal(String status, int color, String preview, boolean isBusy,
+                                             boolean forceVisible, String title, boolean resetUserClosed) {
         boolean wasBusy = sIsBusy;
+        sPendingTitle   = title;
+        sForceVisible   = forceVisible;
         sPendingStatus  = status;
         sPendingColor   = color;
         sPendingPreview = preview != null ? preview : "";
         sIsBusy         = isBusy;
-        if (!wasBusy && isBusy) sUserClosed = false;
+        if (resetUserClosed || (!wasBusy && isBusy)) sUserClosed = false;
         FloatingStatusService inst = sInstance;
         if (inst != null) {
             inst.mHandler.post(() -> {
@@ -64,11 +87,6 @@ public class FloatingStatusService extends Service {
                 inst.updateVisibility();
             });
         }
-    }
-
-    /** 兼容旧 3 参形式：默认认为是 idle 更新（busy=false）。 */
-    public static void updateStatus(String status, int color, String preview) {
-        updateStatus(status, color, preview, false);
     }
 
     // ── Service 生命周期 ────────────────────────────────────────────────────
@@ -79,6 +97,7 @@ public class FloatingStatusService extends Service {
         sInstance = this;
         mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         mFloatingView  = LayoutInflater.from(this).inflate(R.layout.layout_floating_status, null);
+        mTitleText     = mFloatingView.findViewById(R.id.float_title);
         mStatusText    = mFloatingView.findViewById(R.id.float_status);
         mPreviewText   = mFloatingView.findViewById(R.id.float_preview);
 
@@ -134,6 +153,7 @@ public class FloatingStatusService extends Service {
     // ── 内部 ────────────────────────────────────────────────────────────────
 
     private void applyPending() {
+        if (mTitleText != null) mTitleText.setText(sPendingTitle);
         if (mStatusText == null) return;
         mStatusText.setText(sPendingStatus);
         mStatusText.setTextColor(sPendingColor);
@@ -149,7 +169,7 @@ public class FloatingStatusService extends Service {
     private void updateVisibility() {
         if (mFloatingView == null) return;
         boolean inBackground = !TermuxActivity.sActivityForeground;
-        boolean shouldShow   = inBackground && sIsBusy && !sUserClosed;
+        boolean shouldShow   = (sForceVisible || inBackground) && sIsBusy && !sUserClosed;
         mFloatingView.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
     }
 }
