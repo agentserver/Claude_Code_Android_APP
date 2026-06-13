@@ -259,18 +259,18 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             mThinkingText.setText(thinking);
             if (msg.thinkingCollapsed) {
                 mThinkingText.setVisibility(View.GONE);
-                mThinkingHeader.setText("💭 思考过程 ▶");
+                mThinkingHeader.setText("思考过程 ▶");
             } else {
                 mThinkingText.setVisibility(View.VISIBLE);
-                mThinkingHeader.setText("💭 思考中… ▼");
+                mThinkingHeader.setText("思考中… ▼");
             }
             mThinkingContainer.setOnClickListener(v -> {
                 if (mThinkingText.getVisibility() == View.VISIBLE) {
                     mThinkingText.setVisibility(View.GONE);
-                    mThinkingHeader.setText("💭 思考过程 ▶");
+                    mThinkingHeader.setText("思考过程 ▶");
                 } else {
                     mThinkingText.setVisibility(View.VISIBLE);
-                    mThinkingHeader.setText(msg.thinkingCollapsed ? "💭 思考过程 ▼" : "💭 思考中… ▼");
+                    mThinkingHeader.setText(msg.thinkingCollapsed ? "思考过程 ▼" : "思考中… ▼");
                 }
             });
         }

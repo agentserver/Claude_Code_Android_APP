@@ -33,6 +33,7 @@ public class AutomationSettingsFragment extends Fragment {
     private AutomationRecipeAdapter candidatesAdapter;
     private AutomationRecipeAdapter recipesAdapter;
     private SwitchMaterial enabledSwitch;
+    private TextView runtimeSummary;
     private TextView whitelistSummary;
     private TextView candidatesEmpty;
     private TextView recipesEmpty;
@@ -54,6 +55,7 @@ public class AutomationSettingsFragment extends Fragment {
         settingsStore = new AutomationSettingsStore(requireContext());
 
         enabledSwitch = view.findViewById(R.id.automation_boost_enabled);
+        runtimeSummary = view.findViewById(R.id.automation_runtime_summary);
         whitelistSummary = view.findViewById(R.id.automation_whitelist_summary);
         candidatesEmpty = view.findViewById(R.id.automation_candidates_empty);
         recipesEmpty = view.findViewById(R.id.automation_recipes_empty);
@@ -61,8 +63,10 @@ public class AutomationSettingsFragment extends Fragment {
         failuresContainer = view.findViewById(R.id.automation_failures_container);
 
         enabledSwitch.setChecked(settingsStore.isBoostEnabled());
-        enabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
-            settingsStore.setBoostEnabled(isChecked));
+        enabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            settingsStore.setBoostEnabled(isChecked);
+            updateSummary();
+        });
 
         RecyclerView candidatesRecycler = view.findViewById(R.id.automation_candidates_recycler);
         candidatesRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -169,8 +173,19 @@ public class AutomationSettingsFragment extends Fragment {
 
         candidatesEmpty.setVisibility(candidates.isEmpty() ? View.VISIBLE : View.GONE);
         recipesEmpty.setVisibility(recipes.isEmpty() ? View.VISIBLE : View.GONE);
+        updateSummary();
         updateWhitelistSummary();
         renderFailures();
+    }
+
+    private void updateSummary() {
+        if (runtimeSummary == null) return;
+        int failureCount = store == null ? 0 : store.loadFailures().size();
+        String enabled = settingsStore != null && settingsStore.isBoostEnabled() ? "已开启" : "已关闭";
+        runtimeSummary.setText("Boost " + enabled
+            + " · 候选 " + candidates.size() + " 个"
+            + " · 已启用 " + recipes.size() + " 个"
+            + " · 失败 " + failureCount + " 次");
     }
 
     private void updateWhitelistSummary() {
@@ -192,9 +207,12 @@ public class AutomationSettingsFragment extends Fragment {
                 + " · 原因：" + failure.optString("reason", "-"));
             row.setTextColor(0xFF555555);
             row.setTextSize(12);
-            row.setPadding(0, dp(3), 0, dp(3));
-            failuresContainer.addView(row, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            row.setBackgroundResource(R.drawable.bg_status_chip);
+            row.setPadding(dp(8), dp(6), dp(8), dp(6));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, dp(6), 0, 0);
+            failuresContainer.addView(row, params);
         }
     }
 

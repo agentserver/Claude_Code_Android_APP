@@ -403,7 +403,7 @@ public class HomeFragment extends Fragment {
         btnAttach.setOnClickListener(v -> pickFile());
         btnClearAttach.setOnClickListener(v -> clearAttachment());
 
-        // ⏎ 向当前可见 session 发送回车
+        // 向当前可见 session 发送回车
         btnEnter.setOnClickListener(v -> terminal("\r"));
 
         // "打断"：发送 SIGTERM 给当前 turn；currentSid 不变，下条消息自动 --resume 续接
@@ -429,18 +429,19 @@ public class HomeFragment extends Fragment {
             FloatingStatusService.updateStatus("● 就绪", 0xFF2E7D32, "", false);
         });
 
-        // 无障碍权限按钮：跳转系统无障碍设置页
-        MaterialButton btnAccessibility = view.findViewById(R.id.btn_accessibility);
-        btnAccessibility.setOnClickListener(v -> {
+        // 无障碍状态指示：点击跳转系统无障碍设置页
+        View.OnClickListener accessibilityClick = v -> {
             android.content.Intent intent = new android.content.Intent(
                 android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
             requireContext().startActivity(intent);
-        });
+        };
+        if (mAccessibilityStatus != null) {
+            mAccessibilityStatus.setOnClickListener(accessibilityClick);
+        }
 
-        // 截图授权按钮：已授权时点击撤销，未授权时弹系统对话框
-        MaterialButton btnScreenCapture = view.findViewById(R.id.btn_screen_capture);
-        btnScreenCapture.setOnClickListener(v -> {
+        // 截图状态指示：已授权时点击撤销，未授权时弹系统对话框
+        View.OnClickListener screenCaptureClick = v -> {
             TermuxActivity a = act();
             if (a == null) return;
             if (com.termux.app.mcp.ScreenCaptureService.isRunning()) {
@@ -449,7 +450,10 @@ public class HomeFragment extends Fragment {
             } else {
                 a.requestScreenCapturePermission();
             }
-        });
+        };
+        if (mScreenCaptureStatus != null) {
+            mScreenCaptureStatus.setOnClickListener(screenCaptureClick);
+        }
 
         mViewGeneration++;
         mViewActive = true;
@@ -546,10 +550,10 @@ public class HomeFragment extends Fragment {
 
         // 用于 UI 显示的简洁文本（不含路径）
         String displayText = (typed.isEmpty() && pendingName != null)
-                ? "[📎 " + pendingName + "]"
+                ? "[附件 " + pendingName + "]"
                 : typed;
         if (pendingPath != null && !typed.isEmpty()) {
-            displayText = "[📎 " + pendingName + "] " + typed;
+            displayText = "[附件 " + pendingName + "] " + typed;
         }
         clearAttachment();
 
@@ -743,8 +747,10 @@ public class HomeFragment extends Fragment {
     }
 
     private void updateAssistantLabel() {
+        ProviderProfile profile = ProviderProfile.forProvider(mProvider);
+        FloatingStatusService.setDefaultTitle(profile.displayName);
         if (mAdapter != null) {
-            mAdapter.setAssistantLabel(ProviderProfile.forProvider(mProvider).displayName);
+            mAdapter.setAssistantLabel(profile.displayName);
         }
     }
 
@@ -855,7 +861,7 @@ public class HomeFragment extends Fragment {
 
     private void copyFileAsync(Uri uri) {
         mAttachmentPreviewRow.setVisibility(View.VISIBLE);
-        mAttachmentNameText.setText("📎 准备中…");
+        mAttachmentNameText.setText("附件准备中…");
 
         new Thread(() -> {
             try {
@@ -906,7 +912,7 @@ public class HomeFragment extends Fragment {
                 mHandler.post(() -> {
                     mAttachmentPath = finalProotPath; // proot-visible path passed to Claude Code
                     mAttachmentName = finalName;
-                    mAttachmentNameText.setText("📎 " + finalName);
+                    mAttachmentNameText.setText("附件：" + finalName);
                 });
             } catch (Exception e) {
                 mHandler.post(() -> {
@@ -1109,14 +1115,10 @@ public class HomeFragment extends Fragment {
         mSessionAdapter.setActiveId(mCurrentSessionId);
     }
 
-    /** 更新顶栏标题；preview 为 null 时显示当前提供商名称。 */
+    /** 更新顶栏提供商切换控件。 */
     private void updateSessionTitle(@Nullable String preview) {
         if (mSessionTitle == null) return;
-        if (preview == null || preview.isEmpty()) {
-            mSessionTitle.setText(ProviderProfile.forProvider(mProvider).displayName);
-        } else {
-            mSessionTitle.setText(preview.length() > 30 ? preview.substring(0, 30) + "…" : preview);
-        }
+        mSessionTitle.setText(ProviderProfile.forProvider(mProvider).displayName);
     }
 
     private void updateStatus(String text, int color) {
@@ -1130,15 +1132,10 @@ public class HomeFragment extends Fragment {
         if (mAccessibilityStatus == null) return;
         if (enabled) {
             mAccessibilityStatus.setText("● 无障碍: 已启用");
-            mAccessibilityStatus.setTextColor(0xFF2E7D32);
+            mAccessibilityStatus.setTextColor(0xFF16A34A);
         } else {
             mAccessibilityStatus.setText("● 无障碍: 未启用");
-            mAccessibilityStatus.setTextColor(0xFF888888);
-        }
-        View root = getView();
-        if (root != null) {
-            MaterialButton b = root.findViewById(R.id.btn_accessibility);
-            if (b != null) b.setText(enabled ? "无障碍设置" : "开启无障碍");
+            mAccessibilityStatus.setTextColor(0xFF64748B);
         }
     }
 
@@ -1146,19 +1143,14 @@ public class HomeFragment extends Fragment {
         if (mScreenCaptureStatus == null) return;
         if (granted) {
             mScreenCaptureStatus.setText("● 截图: 已授权");
-            mScreenCaptureStatus.setTextColor(0xFF2E7D32);
+            mScreenCaptureStatus.setTextColor(0xFF16A34A);
         } else {
             mScreenCaptureStatus.setText("● 截图: 未授权");
-            mScreenCaptureStatus.setTextColor(0xFF888888);
-        }
-        View btn = getView();
-        if (btn != null) {
-            MaterialButton b = btn.findViewById(R.id.btn_screen_capture);
-            if (b != null) b.setText(granted ? "撤销截图" : "授权截图");
+            mScreenCaptureStatus.setTextColor(0xFF64748B);
         }
     }
 
-    /** 向当前可见 TerminalSession 写入（供"启动"和"⏎"按钮使用）。 */
+    /** 向当前可见 TerminalSession 写入（供启动和回车按钮使用）。 */
     private void terminal(String text) {
         TermuxActivity a = act();
         if (a != null) a.sendTerminalInput(text);

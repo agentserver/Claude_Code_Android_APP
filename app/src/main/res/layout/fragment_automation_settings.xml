@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF"
+    android:background="@color/app_surface"
     android:fillViewport="true">
 
     <LinearLayout
@@ -16,15 +17,39 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/automation_boost_global_enabled"
-            android:textColor="#212121"
-            android:textSize="15sp" />
+            android:textColor="@color/app_text_primary"
+            android:textSize="15sp"
+            app:thumbTint="@color/automation_switch_thumb"
+            app:trackTint="@color/automation_switch_track"
+            app:useMaterialThemeColors="false" />
+
+        <TextView
+            android:id="@+id/automation_runtime_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_settings_summary"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
+            android:textColor="@color/app_primary"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/automation_whitelist_summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="#666666"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/app_text_muted"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="低风险、可复现的动作会被收集为候选；失败时会回退到 Agent，并清除本次 Boost 标记。"
+            android:textColor="@color/app_text_muted"
             android:textSize="12sp" />
 
         <TextView
@@ -32,9 +57,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:text="@string/automation_boost_candidates"
-            android:textColor="#212121"
+            android:textColor="@color/app_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="等待你确认的学习结果；启用后才会进入快速路径。"
+            android:textColor="@color/app_text_muted"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/automation_candidates_empty"
@@ -43,7 +76,7 @@
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:text="@string/automation_boost_empty_candidates"
-            android:textColor="#888888"
+            android:textColor="@color/app_text_muted"
             android:textSize="12sp" />
 
         <androidx.recyclerview.widget.RecyclerView
@@ -57,9 +90,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:text="@string/automation_boost_recipes"
-            android:textColor="#212121"
+            android:textColor="@color/app_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="已允许自动执行的动作；应用和配方白名单会共同限制生效范围。"
+            android:textColor="@color/app_text_muted"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/automation_recipes_empty"
@@ -68,7 +109,7 @@
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:text="@string/automation_boost_empty_recipes"
-            android:textColor="#888888"
+            android:textColor="@color/app_text_muted"
             android:textSize="12sp" />
 
         <androidx.recyclerview.widget.RecyclerView
@@ -82,9 +123,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:text="@string/automation_boost_failures"
-            android:textColor="#212121"
+            android:textColor="@color/app_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="这里显示最近回退原因，用来判断哪些路径还不适合自动化。"
+            android:textColor="@color/app_text_muted"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/automation_failures_empty"
@@ -93,7 +142,7 @@
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:text="@string/automation_boost_empty_failures"
-            android:textColor="#888888"
+            android:textColor="@color/app_text_muted"
             android:textSize="12sp" />
 
         <LinearLayout

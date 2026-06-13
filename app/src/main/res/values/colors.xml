@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B1E2B</color>
+    <color name="app_primary">#2563EB</color>
+    <color name="app_primary_surface">#EFF6FF</color>
+    <color name="app_primary_border">#BFDBFE</color>
+    <color name="app_text_primary">#111827</color>
+    <color name="app_text_secondary">#475569</color>
+    <color name="app_text_muted">#64748B</color>
+    <color name="app_border">#E2E8F0</color>
+    <color name="app_surface">#F8FAFC</color>
+    <color name="app_success">#16A34A</color>
+    <color name="app_warning">#F59E0B</color>
+    <color name="app_danger">#DC2626</color>
 </resources>

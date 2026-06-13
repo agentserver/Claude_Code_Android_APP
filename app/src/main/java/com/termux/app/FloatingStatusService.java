@@ -38,6 +38,7 @@ public class FloatingStatusService extends Service {
     // 与 Activity 真实生命周期不同步（早期版本用 mInBackground 缓存，存在前台仍显示的 bug）
     private static volatile boolean sIsBusy      = false;
     private static volatile boolean sUserClosed  = false;
+    private static volatile String  sDefaultTitle = "Claude Code";
     private static volatile String  sPendingTitle = "Claude Code";
     private static volatile boolean sForceVisible = false;
 
@@ -54,7 +55,7 @@ public class FloatingStatusService extends Service {
      * busy 从 false→true 的边沿会重置 sUserClosed（让新任务能再次弹出）。
      */
     public static void updateStatus(String status, int color, String preview, boolean isBusy) {
-        updateStatusInternal(status, color, preview, isBusy, false, "Claude Code", false);
+        updateStatusInternal(status, color, preview, isBusy, false, sDefaultTitle, false);
     }
 
     /** 兼容旧 3 参形式：默认认为是 idle 更新（busy=false）。 */
@@ -66,7 +67,17 @@ public class FloatingStatusService extends Service {
         if (active) {
             updateStatusInternal(status, color, preview, true, true, "Automation Boost", true);
         } else {
-            updateStatusInternal(status, color, preview, false, false, "Claude Code", false);
+            updateStatusInternal(status, color, preview, false, false, sDefaultTitle, false);
+        }
+    }
+
+    public static void setDefaultTitle(String title) {
+        String next = (title == null || title.trim().isEmpty()) ? "Claude Code" : title.trim();
+        sDefaultTitle = next;
+        if (!sForceVisible) sPendingTitle = next;
+        FloatingStatusService inst = sInstance;
+        if (inst != null) {
+            inst.mHandler.post(inst::applyPending);
         }
     }
 
