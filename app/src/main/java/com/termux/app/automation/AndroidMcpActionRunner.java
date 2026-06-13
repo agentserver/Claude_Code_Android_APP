@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.termux.app.mcp.McpAccessibilityService;
 import com.termux.app.mcp.tools.AppTool;
+import com.termux.app.mcp.tools.AdbTool;
 import com.termux.app.mcp.tools.UiTool;
 
 public final class AndroidMcpActionRunner implements AndroidActionRunner {
@@ -29,6 +30,15 @@ public final class AndroidMcpActionRunner implements AndroidActionRunner {
                 return;
             case "ui.swipe":
                 new UiTool(UiTool.Kind.SWIPE).call(step.arguments, mContext);
+                return;
+            case "adb.tap":
+                new AdbTool(AdbTool.Kind.TAP).call(step.arguments, mContext);
+                return;
+            case "adb.swipe":
+                new AdbTool(AdbTool.Kind.SWIPE).call(step.arguments, mContext);
+                return;
+            case "adb.keyevent":
+                new AdbTool(AdbTool.Kind.KEYEVENT).call(step.arguments, mContext);
                 return;
             default:
                 throw new Exception("Unsupported Boost tool: " + step.toolName);

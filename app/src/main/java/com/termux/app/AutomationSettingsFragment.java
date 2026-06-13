@@ -176,7 +176,7 @@ public class AutomationSettingsFragment extends Fragment {
     private void updateWhitelistSummary() {
         int appCount = settingsStore.appWhitelist().size();
         int recipeCount = settingsStore.recipeWhitelist().size();
-        whitelistSummary.setText("Whitelisted apps: " + appCount + " · whitelisted recipes: " + recipeCount);
+        whitelistSummary.setText("应用白名单：" + appCount + " 个 · 配方白名单：" + recipeCount + " 个");
     }
 
     private void renderFailures() {
@@ -187,9 +187,9 @@ public class AutomationSettingsFragment extends Fragment {
         for (int i = failures.size() - 1; i >= start; i--) {
             JSONObject failure = failures.get(i);
             TextView row = new TextView(requireContext());
-            row.setText("recipe: " + failure.optString("recipe_id", "-")
-                + " · step: " + failure.optString("step_id", "-")
-                + " · reason: " + failure.optString("reason", "-"));
+            row.setText("配方：" + failure.optString("recipe_id", "-")
+                + " · 步骤：" + failure.optString("step_id", "-")
+                + " · 原因：" + failure.optString("reason", "-"));
             row.setTextColor(0xFF555555);
             row.setTextSize(12);
             row.setPadding(0, dp(3), 0, dp(3));

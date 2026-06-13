@@ -43,6 +43,10 @@ public class AndroidCapabilityPromptBuilderTest {
         assertTrue(skill.contains("android-mcp"));
         assertTrue(skill.contains("screen.capture"));
         assertTrue(skill.contains("ui.tap"));
+        assertTrue(skill.contains("adb.get_status"));
+        assertTrue(skill.contains("adb.tap"));
+        assertTrue(skill.contains("微信"));
+        assertTrue(skill.contains("节点树为空"));
         assertTrue(skill.contains("MCP 配置未生效"));
     }
 }

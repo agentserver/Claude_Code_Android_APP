@@ -12,9 +12,11 @@ public final class AutomationPolicy {
     public static AutomationRiskLevel classifyStep(ActionStep step) {
         if (step == null) return AutomationRiskLevel.HIGH;
         String tool = step.toolName;
-        if ("ui.input_text".equals(tool)) return AutomationRiskLevel.HIGH;
+        if ("ui.input_text".equals(tool) || "adb.input_text".equals(tool)) return AutomationRiskLevel.HIGH;
         if (hasHighRiskText(step)) return AutomationRiskLevel.HIGH;
-        if ("app.open".equals(tool) || "ui.click_text".equals(tool) || "ui.tap".equals(tool) || "ui.swipe".equals(tool)) {
+        if ("app.open".equals(tool) || "ui.click_text".equals(tool)
+            || "ui.tap".equals(tool) || "ui.swipe".equals(tool)
+            || "adb.tap".equals(tool) || "adb.swipe".equals(tool) || "adb.keyevent".equals(tool)) {
             return AutomationRiskLevel.LOW;
         }
         return AutomationRiskLevel.MEDIUM;
@@ -34,7 +36,7 @@ public final class AutomationPolicy {
 
     public static JSONObject redactArguments(String toolName, JSONObject args) throws Exception {
         JSONObject copy = args == null ? new JSONObject() : new JSONObject(args.toString());
-        if ("ui.input_text".equals(toolName) && copy.has("text")) {
+        if (("ui.input_text".equals(toolName) || "adb.input_text".equals(toolName)) && copy.has("text")) {
             copy.put("text", "[redacted]");
         }
         return copy;
@@ -56,9 +58,13 @@ public final class AutomationPolicy {
         if (recipe.steps.isEmpty()) return false;
         for (ActionStep step : recipe.steps) {
             if (classifyStep(step) != AutomationRiskLevel.LOW) return false;
-            if (!hasStableSelector(step) && "ui.tap".equals(step.toolName)) return false;
+            if (!hasStableSelector(step) && isCoordinateTap(step.toolName)) return false;
         }
         return true;
+    }
+
+    private static boolean isCoordinateTap(String toolName) {
+        return "ui.tap".equals(toolName) || "adb.tap".equals(toolName);
     }
 
     private static boolean hasStableAnchor(UiSelector selector) {

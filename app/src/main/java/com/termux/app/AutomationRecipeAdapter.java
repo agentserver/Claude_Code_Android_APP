@@ -80,18 +80,28 @@ public class AutomationRecipeAdapter extends RecyclerView.Adapter<AutomationReci
     private String title(ActionRecipe recipe) {
         if (recipe.name != null && !recipe.name.trim().isEmpty()) return recipe.name;
         if (recipe.id != null && !recipe.id.trim().isEmpty()) return recipe.id;
-        return "(unnamed recipe)";
+        return "未命名动作配方";
     }
 
     private String summary(ActionRecipe recipe) {
         String packageName = emptyToDash(recipe.targetPackage);
-        String risk = recipe.riskLevel == null ? "-" : recipe.riskLevel.name();
+        String risk = riskLabel(recipe.riskLevel);
         int stepCount = recipe.steps == null ? 0 : recipe.steps.size();
         RecipeStats stats = recipe.stats == null ? RecipeStats.empty() : recipe.stats;
-        return "package: " + packageName
-            + " · risk: " + risk
-            + " · steps: " + stepCount
-            + " · success/failure: " + stats.successCount + "/" + stats.failureCount;
+        return "目标应用：" + packageName
+            + " · 风险：" + risk
+            + " · 步骤：" + stepCount
+            + " · 成功/失败：" + stats.successCount + "/" + stats.failureCount;
+    }
+
+    private String riskLabel(com.termux.app.automation.AutomationRiskLevel riskLevel) {
+        if (riskLevel == null) return "-";
+        switch (riskLevel) {
+            case LOW: return "低";
+            case MEDIUM: return "中";
+            case HIGH: return "高";
+            default: return riskLevel.name();
+        }
     }
 
     private String emptyToDash(String value) {

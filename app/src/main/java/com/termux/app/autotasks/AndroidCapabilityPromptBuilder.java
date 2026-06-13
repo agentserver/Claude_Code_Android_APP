@@ -57,13 +57,22 @@ public final class AndroidCapabilityPromptBuilder {
             + "- `ui.input_text` — 向当前焦点输入框输入文字\n"
             + "- `ui.get_accessibility_tree` — 获取当前屏幕 UI 元素树（用于分析界面、定位元素）\n\n"
 
+            + "### ADB Companion 控制（高级回退，需电脑端 companion + adb reverse）\n"
+            + "- `adb.get_status` — 检查宿主机 ADB Companion 是否在线\n"
+            + "- `adb.screenshot` — 通过宿主机 ADB 截取当前屏幕\n"
+            + "- `adb.tap` — 通过 ADB 点击坐标 `{x, y}`\n"
+            + "- `adb.swipe` — 通过 ADB 滑动 `{x1,y1} -> {x2,y2}`\n"
+            + "- `adb.input_text` — 通过 ADB 向当前焦点输入文本\n"
+            + "- `adb.keyevent` — 发送 BACK/HOME/ENTER 等按键事件\n"
+            + "- `adb.current_activity` — 读取当前前台包名和 Activity\n\n"
+
             + "### 截图与摄像头\n"
             + "- `screen.capture` — 截取当前屏幕，返回 base64 JPEG\n"
             + "- `camera.take_photo` — 用后置摄像头拍照，返回 base64 JPEG\n\n"
 
             + "**关于截屏的硬性规则：**\n\n"
-            + "1. **`screen.capture` 是获取当前屏幕的唯一正确方式**。这是手机 App 通过 Android `MediaProjection` API 实时截屏的接口。\n"
-            + "2. **proot 容器内任何 Linux 截屏工具都会失败**，无需尝试：`scrot`、`grim`、`import`、`gnome-screenshot`、`screencap`、`adb shell`。\n"
+            + "1. **默认优先使用 `screen.capture` 获取当前屏幕**。这是手机 App 通过 Android `MediaProjection` API 实时截屏的接口；只有 `adb.get_status` 在线且需要无障碍失败回退时，才使用 `adb.screenshot`。\n"
+            + "2. **不要在 proot 容器里直接运行 Linux 截屏工具或 `adb shell`**：`scrot`、`grim`、`import`、`gnome-screenshot`、`screencap` 都不是当前屏幕来源；需要 ADB 时只使用 `adb.*` MCP 工具。\n"
             + "3. **`/sdcard/Pictures/Screenshots/` 是用户历史截图，不是当前屏幕**。绝不能把目录里最新的图当作当前屏幕反馈给用户。\n"
             + "4. **若 `screen.capture` 返回 \"Screen capture permission not granted\"**，立即停止替代方案，告诉用户打开手机 App 主页并点击「授权截图」后重试。\n\n"
 
@@ -86,6 +95,12 @@ public final class AndroidCapabilityPromptBuilder {
             + "1. `screen.capture` 观察当前屏幕。\n"
             + "2. `ui.get_accessibility_tree` 分析 UI 结构，找到目标元素。\n"
             + "3. 使用 `ui.click_text` / `ui.tap` / `ui.input_text` 执行操作。\n"
-            + "4. 再次调用 `screen.capture` 或 HTTP 状态接口确认结果，循环直到任务完成。\n\n";
+            + "4. 再次调用 `screen.capture` 或 HTTP 状态接口确认结果，循环直到任务完成。\n\n"
+
+            + "## 无障碍失败时的回退策略\n\n"
+            + "- 如果目标 App（尤其微信、小程序、WebView、自绘界面）返回的无障碍节点树为空，不要反复尝试 `ui.click_text`。\n"
+            + "- 节点树为空时，改用 `screen.capture` 或 `adb.screenshot` 观察屏幕，通过可见文字、图标、输入框位置推断坐标。\n"
+            + "- `adb.get_status` 在线时，可用 `adb.tap` / `adb.swipe` / `adb.input_text` / `adb.keyevent` 执行回退操作；每一步后必须重新截图确认。\n"
+            + "- 微信中的发送、删除、支付、转账、授权等高风险动作，必须先向用户确认或只在明确测试白名单内执行。\n\n";
     }
 }

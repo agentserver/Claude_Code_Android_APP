@@ -348,6 +348,10 @@ public class AutoUbuntuManager {
             + "| `ui.swipe` | 滑动手势 |\n"
             + "| `app.open` | 通过包名启动应用 |\n"
             + "| `app.get_current_activity` | 查看当前 Activity |\n"
+            + "| `adb.get_status` | 检查宿主机 ADB Companion |\n"
+            + "| `adb.screenshot` | 通过 ADB 截图 |\n"
+            + "| `adb.tap` / `adb.swipe` | ADB 坐标点击与滑动 |\n"
+            + "| `adb.input_text` / `adb.keyevent` | ADB 文本输入与按键 |\n"
             + "| `camera.take_photo` | 拍照 |\n\n"
             + "## 标准操作循环\n"
             + "```\n"
@@ -356,7 +360,12 @@ public class AutoUbuntuManager {
             + "ui.tap / ui.click_text / ui.input_text → 执行操作\n"
             + "screen.capture → 确认结果\n"
             + "重复直到任务完成\n"
-            + "```\n";
+            + "```\n\n"
+            + "## 回退规则\n"
+            + "- 微信、小程序、WebView 或自绘界面可能返回空节点树。\n"
+            + "- 节点树为空时，不要反复尝试 `ui.click_text`；改用截图识别坐标。\n"
+            + "- `adb.get_status` 在线时，可用 `adb.*` 工具作为高级回退；不要在 proot 里直接运行 `adb shell`。\n"
+            + "- 发送、删除、支付、转账、授权等动作必须先确认或只在测试白名单内执行。\n";
     }
 
     private static void injectMcpSettings(File claudeDir) {

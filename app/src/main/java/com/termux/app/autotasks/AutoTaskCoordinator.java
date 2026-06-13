@@ -9,6 +9,7 @@ import com.termux.app.mcp.tools.AndroidStatusTool;
 import com.termux.app.mcp.tools.CameraTool;
 import com.termux.app.mcp.tools.FileTool;
 import com.termux.app.mcp.tools.AppTool;
+import com.termux.app.mcp.tools.AdbTool;
 import com.termux.app.mcp.tools.ScreenCaptureTool;
 import com.termux.app.mcp.tools.UiTool;
 import com.termux.app.mcp.tools.UiTreeTool;
@@ -61,6 +62,13 @@ public class AutoTaskCoordinator {
         mMcpHttpServer.registerTool(new UiTreeTool());
         mMcpHttpServer.registerTool(new AppTool(AppTool.Kind.OPEN));
         mMcpHttpServer.registerTool(new AppTool(AppTool.Kind.GET_ACTIVITY));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.GET_STATUS));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.SCREENSHOT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.TAP));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.SWIPE));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.INPUT_TEXT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.KEYEVENT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.CURRENT_ACTIVITY));
         mMcpHttpServer.start();
         // 后台生成 capabilities.json，供 Ubuntu 里的 Claude Code 读取设备能力快照
         new CapabilitiesManager(activity).generateAsync();

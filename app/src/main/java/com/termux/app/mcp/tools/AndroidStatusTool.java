@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import androidx.core.content.ContextCompat;
 
 import com.termux.app.mcp.AndroidMcpPermissionState;
+import com.termux.app.mcp.AdbCompanionClient;
 import com.termux.app.mcp.McpTool;
 
 import org.json.JSONArray;
@@ -16,6 +17,15 @@ import org.json.JSONObject;
 public class AndroidStatusTool implements McpTool {
 
     private static final String VERSION = "0.1.0";
+    private final AdbCompanionClient adbClient;
+
+    public AndroidStatusTool() {
+        this(new AdbCompanionClient(AdbCompanionClient.DEFAULT_BASE_URL, 250));
+    }
+
+    AndroidStatusTool(AdbCompanionClient adbClient) {
+        this.adbClient = adbClient;
+    }
 
     @Override public String getName() { return "android.get_status"; }
 
@@ -42,9 +52,13 @@ public class AndroidStatusTool implements McpTool {
         perms.put("accessibility",    accessibility);
         perms.put("media_projection", mediaProjection);
         result.put("permissions", perms);
+        JSONObject adbStatus = adbStatus();
+        boolean adbOnline = adbStatus.optBoolean("ok", false);
+        result.put("adb_companion", adbStatus);
 
         JSONArray tools = new JSONArray();
         tools.put("android.get_status");
+        tools.put("adb.get_status");
         tools.put("camera.take_photo");
         tools.put("file.check_exists");
         tools.put("file.list");
@@ -61,6 +75,14 @@ public class AndroidStatusTool implements McpTool {
             tools.put("app.open");
             tools.put("app.get_current_activity");
         }
+        if (adbOnline) {
+            tools.put("adb.screenshot");
+            tools.put("adb.tap");
+            tools.put("adb.swipe");
+            tools.put("adb.input_text");
+            tools.put("adb.keyevent");
+            tools.put("adb.current_activity");
+        }
         result.put("enabled_tools", tools);
 
         result.put("current_task_id", JSONObject.NULL);
@@ -75,5 +97,27 @@ public class AndroidStatusTool implements McpTool {
 
     private static boolean hasPermission(Context ctx, String permission) {
         return ContextCompat.checkSelfPermission(ctx, permission) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private JSONObject adbStatus() {
+        try {
+            JSONObject status = adbClient.call("status", new JSONObject());
+            if (!status.has("ok")) status.put("ok", true);
+            return status;
+        } catch (Exception e) {
+            JSONObject status = new JSONObject();
+            try {
+                status.put("ok", false);
+                status.put("message", "ADB Companion 未连接: " + safeMessage(e));
+                status.put("port", AdbCompanionClient.DEFAULT_PORT);
+            } catch (Exception ignored) {
+            }
+            return status;
+        }
+    }
+
+    private static String safeMessage(Exception e) {
+        String message = e == null ? "" : e.getMessage();
+        return message == null || message.isEmpty() ? String.valueOf(e) : message;
     }
 }

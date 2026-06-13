@@ -26,6 +26,37 @@ public class AutomationPolicyTest {
     }
 
     @Test
+    public void adbInputTextIsHighRiskAndRedacted() throws Exception {
+        ActionStep step = new ActionStep(
+            "s", "adb.input_text", new JSONObject().put("text", "secret-token"),
+            Arrays.asList(new UiSelector("", "", "EditText", new int[]{0, 0, 1, 1}, "", "", 80)),
+            ScreenFingerprint.empty(), ScreenFingerprint.empty(), 3000, "fallback_agent");
+
+        Assert.assertEquals(AutomationRiskLevel.HIGH, AutomationPolicy.classifyStep(step));
+        JSONObject redacted = AutomationPolicy.redactArguments("adb.input_text", step.arguments);
+        Assert.assertEquals("[redacted]", redacted.optString("text"));
+        Assert.assertEquals("secret-token", step.arguments.optString("text"));
+    }
+
+    @Test
+    public void adbTapWithoutStableSelectorCannotAutoBoost() throws Exception {
+        ActionStep step = new ActionStep(
+            "s", "adb.tap", new JSONObject().put("x", 10).put("y", 20),
+            Arrays.asList(), ScreenFingerprint.empty(), ScreenFingerprint.empty(),
+            3000, "fallback_agent");
+        ActionRecipe recipe = new ActionRecipe(
+            "r", "坐标点击", true, true, AutomationRiskLevel.LOW,
+            Arrays.asList("坐标点击"), "pkg", "Activity",
+            ScreenFingerprint.empty(),
+            new ScreenFingerprint("pkg", "Activity", Arrays.asList("完成"), 1, 0, ""),
+            Arrays.asList(step), "agent_success", Arrays.asList("task"),
+            new RecipeStats(0, 0, 0, 0, 0, ""), "v1", null);
+
+        Assert.assertEquals(AutomationRiskLevel.LOW, AutomationPolicy.classifyStep(step));
+        Assert.assertFalse(AutomationPolicy.canAutoBoost(recipe));
+    }
+
+    @Test
     public void clickTextWithStableSelectorIsLowRisk() throws Exception {
         ActionStep step = new ActionStep(
             "s", "ui.click_text", new JSONObject().put("text", "无障碍"),

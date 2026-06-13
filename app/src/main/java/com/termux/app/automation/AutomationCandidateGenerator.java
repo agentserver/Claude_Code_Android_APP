@@ -16,6 +16,10 @@ public final class AutomationCandidateGenerator {
     private static final String TOOL_SWIPE = "ui.swipe";
     private static final String TOOL_TAP = "ui.tap";
     private static final String TOOL_INPUT_TEXT = "ui.input_text";
+    private static final String TOOL_ADB_TAP = "adb.tap";
+    private static final String TOOL_ADB_SWIPE = "adb.swipe";
+    private static final String TOOL_ADB_KEYEVENT = "adb.keyevent";
+    private static final String TOOL_ADB_INPUT_TEXT = "adb.input_text";
     private static final String SOURCE_AGENT_SUCCESS = "agent_success";
     private static final String VERSION_ID = "v1";
 
@@ -32,7 +36,7 @@ public final class AutomationCandidateGenerator {
 
         for (ToolTraceEvent trace : traces) {
             if (trace == null) continue;
-            if (TOOL_INPUT_TEXT.equals(trace.toolName)) return null;
+            if (TOOL_INPUT_TEXT.equals(trace.toolName) || TOOL_ADB_INPUT_TEXT.equals(trace.toolName)) return null;
             if (!trace.success || !isAllowedTool(trace.toolName)) continue;
 
             retained.add(trace);
@@ -59,7 +63,7 @@ public final class AutomationCandidateGenerator {
         List<ActionStep> steps = new ArrayList<>();
         ToolTraceEvent lastRetained = null;
         for (ToolTraceEvent trace : retained) {
-            if (TOOL_TAP.equals(trace.toolName) && !hasClickTextAnchor) continue;
+            if (isCoordinateTap(trace.toolName) && !hasClickTextAnchor) continue;
             ActionStep step = toStep(trace);
             if (step != null) {
                 steps.add(step);
@@ -171,7 +175,14 @@ public final class AutomationCandidateGenerator {
         return TOOL_APP_OPEN.equals(toolName)
             || TOOL_CLICK_TEXT.equals(toolName)
             || TOOL_SWIPE.equals(toolName)
-            || TOOL_TAP.equals(toolName);
+            || TOOL_TAP.equals(toolName)
+            || TOOL_ADB_TAP.equals(toolName)
+            || TOOL_ADB_SWIPE.equals(toolName)
+            || TOOL_ADB_KEYEVENT.equals(toolName);
+    }
+
+    private static boolean isCoordinateTap(String toolName) {
+        return TOOL_TAP.equals(toolName) || TOOL_ADB_TAP.equals(toolName);
     }
 
     private static List<String> nonEmptyList(String value) {
