@@ -74,7 +74,11 @@ public class LoomCommandBuilderTest {
 
         Assert.assertTrue(script.contains("Driver already registered; reusing existing config"));
         Assert.assertTrue(script.contains("driver_has_identity"));
+        Assert.assertTrue(script.contains("driver_has_credentials"));
         Assert.assertTrue(script.contains("driver_server_matches"));
+        Assert.assertTrue(script.contains("driver_credentials_valid"));
+        Assert.assertTrue(script.contains("/api/agent/whoami"));
+        Assert.assertTrue(script.contains("Driver credentials invalid; registering again"));
         Assert.assertTrue(script.contains("/home/codex/loom-driver/driver-agent register"));
         Assert.assertTrue(script.contains("tee -a \"$HOME/loom-driver-bind.log\""));
     }

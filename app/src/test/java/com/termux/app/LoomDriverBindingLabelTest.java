@@ -63,6 +63,15 @@ public class LoomDriverBindingLabelTest {
         Assert.assertTrue(source.contains("normalizeRole"));
     }
 
+    @Test
+    public void collaborationBindButtonDoesNotSkipCredentialProbeForCachedValidStatus() throws Exception {
+        String source = readSource("src/main/java/com/termux/app/CollaborationFragment.java")
+            .replace("\r\n", "\n");
+
+        Assert.assertFalse(source.contains("Driver 已绑定，无需重复扫码。"));
+        Assert.assertTrue(source.contains("LoomCommandBuilder.bindDriverIfNeededScript(settings)"));
+    }
+
     private static Document parseLayout(String fileName) throws Exception {
         File file = new File("src/main/res/layout/" + fileName);
         if (!file.isFile()) {

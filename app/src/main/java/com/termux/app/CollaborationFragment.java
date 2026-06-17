@@ -567,13 +567,6 @@ public class CollaborationFragment extends Fragment {
             return;
         }
 
-        String status = currentDriverBindingStatus(safe);
-        if (CollaborationConnectionState.DRIVER_STATUS_VALID.equals(status)) {
-            setDriverBindingStatus("Driver：已绑定");
-            Toast.makeText(getContext(), "Driver 已绑定，无需重复扫码。", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         String script = LoomCommandBuilder.setupConfigScript(settings)
             + "\n" + LoomCommandBuilder.bindDriverIfNeededScript(settings)
             + "\n" + LoomCommandBuilder.readDriverConfigScript(settings);
