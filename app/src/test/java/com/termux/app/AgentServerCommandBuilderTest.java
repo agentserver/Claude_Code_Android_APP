@@ -27,7 +27,34 @@ public class AgentServerCommandBuilderTest {
     }
 
     @Test
-    public void codexScriptUsesOpenAiEnvAndSupportProbe() {
+    public void codexScriptRunsServerGeneratedExecServerCommand() {
+        AgentServerCommandBuilder.Config c = new AgentServerCommandBuilder.Config(
+            "https://agent.example.com",
+            "",
+            "phone",
+            "sk-openai",
+            "",
+            "export CODEX_ACCESS_TOKEN='jwt'; codex -c chatgpt_base_url='https://codex-auth.example.com' exec-server --remote 'https://exec.example.com' --environment-id 'exe_123' --name 'phone' --use-agent-identity-auth");
+
+        String script = AgentServerCommandBuilder.connectScript(
+            AssistantProvider.CODEX,
+            c,
+            "/data/data/com.termux/files/usr");
+
+        Assert.assertTrue(script.contains("--user codex"));
+        Assert.assertTrue(script.contains("codex -c chatgpt_base_url='https://codex-auth.example.com' exec-server --remote"));
+        Assert.assertTrue(script.contains("--environment-id 'exe_123'"));
+        Assert.assertFalse(script.contains("agentserver help"));
+        Assert.assertFalse(script.contains("codexcode"));
+        Assert.assertFalse(script.contains("agentserver codex"));
+        Assert.assertTrue(script.contains("agentserver-codex-agent.log"));
+        Assert.assertFalse(script.contains("ANTHROPIC_API_KEY"));
+        Assert.assertFalse(script.contains("OPENAI_API_KEY"));
+        Assert.assertFalse(script.contains(".agentserver-pipe.jsonl"));
+    }
+
+    @Test
+    public void codexScriptRejectsMissingExecServerCommand() {
         AgentServerCommandBuilder.Config c = new AgentServerCommandBuilder.Config(
             "https://agent.example.com", "", "phone", "sk-openai", "");
 
@@ -36,17 +63,31 @@ public class AgentServerCommandBuilderTest {
             c,
             "/data/data/com.termux/files/usr");
 
-        Assert.assertTrue(script.contains("OPENAI_API_KEY='sk-openai'"));
+        Assert.assertTrue(script.contains("请粘贴 AgentServer Web UI 生成的 Codex Connector 命令"));
+        Assert.assertFalse(script.contains("agentserver codex"));
+        Assert.assertFalse(script.contains("codexcode"));
+    }
+
+    @Test
+    public void nullProviderDefaultsToCodex() {
+        AgentServerCommandBuilder.Config c = new AgentServerCommandBuilder.Config(
+            "https://agent.example.com",
+            "",
+            "phone",
+            "sk-openai",
+            "",
+            "codex exec-server --remote 'https://exec.example.com' --environment-id 'exe_123'");
+
+        String script = AgentServerCommandBuilder.connectScript(
+            null,
+            c,
+            "/data/data/com.termux/files/usr");
+
         Assert.assertTrue(script.contains("--user codex"));
-        Assert.assertTrue(script.contains("agentserver help"));
-        Assert.assertTrue(script.contains("grep -Eq '(^|[[:space:]])codexcode([[:space:]]|\\$)'"));
-        Assert.assertTrue(script.contains("grep -Eq '(^|[[:space:]])codex([[:space:]]|\\$)'"));
-        Assert.assertTrue(script.contains("_agentserver_subcommand=codexcode"));
-        Assert.assertTrue(script.contains("_agentserver_subcommand=codex"));
-        Assert.assertTrue(script.contains("agentserver \\$_agentserver_subcommand"));
         Assert.assertTrue(script.contains("agentserver-codex-agent.log"));
+        Assert.assertTrue(script.contains("codex exec-server --remote"));
+        Assert.assertFalse(script.contains("OPENAI_API_KEY"));
         Assert.assertFalse(script.contains("ANTHROPIC_API_KEY"));
-        Assert.assertFalse(script.contains(".agentserver-pipe.jsonl"));
     }
 
     @Test
@@ -74,18 +115,22 @@ public class AgentServerCommandBuilderTest {
     public void providerProcessPatternsAreScoped() {
         Assert.assertEquals("agentserver claudecode([[:space:]]|$)",
             AgentServerCommandBuilder.processPattern(AssistantProvider.CLAUDE));
-        Assert.assertEquals("agentserver codex(code)?([[:space:]]|$)",
+        Assert.assertEquals("codex .*exec-server .*--remote",
             AgentServerCommandBuilder.processPattern(AssistantProvider.CODEX));
     }
 
     @Test
-    public void codexProcessPatternRequiresCodexSubcommand() {
+    public void codexProcessPatternRequiresExecServerRemote() {
         String pattern = AgentServerCommandBuilder.processPattern(AssistantProvider.CODEX);
         String javaPattern = pattern.replace("[[:space:]]", "\\s");
 
         Assert.assertTrue(java.util.regex.Pattern.compile(javaPattern)
-            .matcher("agentserver codex --server x").find());
+            .matcher("codex exec-server --remote https://exec.example.com").find());
         Assert.assertTrue(java.util.regex.Pattern.compile(javaPattern)
+            .matcher("codex -c chatgpt_base_url=https://x exec-server --remote https://exec.example.com").find());
+        Assert.assertFalse(java.util.regex.Pattern.compile(javaPattern)
+            .matcher("agentserver codex --server x").find());
+        Assert.assertFalse(java.util.regex.Pattern.compile(javaPattern)
             .matcher("agentserver codexcode --server x").find());
         Assert.assertFalse(java.util.regex.Pattern.compile(javaPattern)
             .matcher("agentserver claudecode --server https://codex.example.com").find());

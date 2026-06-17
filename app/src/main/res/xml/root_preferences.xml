@@ -1,12 +1,6 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
-        app:key="automation_boost"
-        app:title="@string/automation_boost_preferences_title"
-        app:summary="@string/automation_boost_preferences_summary"
-        app:persistent="false"/>
-
-    <Preference
         app:key="termux"
         app:title="@string/termux_preferences_title"
         app:summary="@string/termux_preferences_summary"
@@ -39,17 +33,5 @@
         app:summary="@string/termux_widget_preferences_summary"
         app:isPreferenceVisible="false"
         app:fragment="com.termux.app.fragments.settings.TermuxWidgetPreferencesFragment"/>
-
-    <Preference
-        app:key="about"
-        app:title="@string/about_preference_title"
-        app:persistent="false"/>
-    <!-- app:layout="@layout/preference_markdown_text" -->
-
-    <Preference
-        app:key="donate"
-        app:title="@string/donate_preference_title"
-        app:persistent="false"
-        app:isPreferenceVisible="false"/>
 
 </PreferenceScreen>

@@ -1,5 +1,7 @@
 package com.termux.app.loom;
 
+import com.termux.app.AssistantProvider;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -10,6 +12,8 @@ public class LoomConfigRendererTest {
         LoomSettings settings = LoomSettings.defaults();
 
         Assert.assertEquals("loom-local-bootstrap-key", settings.workspaceApiKey);
+        Assert.assertEquals("slave", settings.roleMode);
+        Assert.assertEquals(AssistantProvider.CODEX, settings.agentProvider);
     }
 
     @Test
@@ -29,6 +33,7 @@ public class LoomConfigRendererTest {
     @Test
     public void driverConfigContainsAgentServerObserverAndClaudeBackend() {
         LoomSettings settings = LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CLAUDE)
             .withAgentServerUrl("https://agent.example.com")
             .withObserverUrl("http://127.0.0.1:8090")
             .withWorkspaceId("ws-phone")
@@ -84,7 +89,7 @@ public class LoomConfigRendererTest {
     @Test
     public void codexDriverConfigContainsCodexBackendAndPaths() {
         LoomSettings settings = LoomSettings.defaults()
-            .withAgentProvider(com.termux.app.AssistantProvider.CODEX)
+            .withAgentProvider(AssistantProvider.CODEX)
             .withDriverName("driver-codex");
 
         String yaml = LoomConfigRenderer.renderDriverConfig(
@@ -102,6 +107,7 @@ public class LoomConfigRendererTest {
     @Test
     public void slaveConfigContainsSkillsResourcesAndTags() {
         LoomSettings settings = LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CLAUDE)
             .withAgentServerUrl("https://agent.example.com")
             .withObserverUrl("http://127.0.0.1:8090")
             .withWorkspaceId("ws-phone")
@@ -150,7 +156,7 @@ public class LoomConfigRendererTest {
     @Test
     public void codexSlaveConfigContainsCodexBackendAndPaths() {
         LoomSettings settings = LoomSettings.defaults()
-            .withAgentProvider(com.termux.app.AssistantProvider.CODEX)
+            .withAgentProvider(AssistantProvider.CODEX)
             .withSlaveName("slave-codex");
 
         String yaml = LoomConfigRenderer.renderSlaveConfig(
@@ -170,6 +176,7 @@ public class LoomConfigRendererTest {
     @Test
     public void configQuotesYamlSensitiveScalars() {
         LoomSettings driverSettings = LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CLAUDE)
             .withAgentServerUrl("https://agent.example.com/root?x=a: b#frag")
             .withObserverUrl("http://127.0.0.1:8090/path#observer")
             .withWorkspaceId("ws: phone #1")
@@ -193,6 +200,7 @@ public class LoomConfigRendererTest {
         Assert.assertTrue(driverYaml.contains("token_state_path: \"/home/claude/.loom/driver\\\\local/observer.token\""));
 
         LoomSettings slaveSettings = LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CLAUDE)
             .withAgentServerUrl("https://agent.example.com/root?x=a: b#frag")
             .withObserverUrl("http://127.0.0.1:8090/path#observer")
             .withWorkspaceId("ws: phone #1")

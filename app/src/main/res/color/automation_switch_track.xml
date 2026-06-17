@@ -3,5 +3,5 @@
     <item
         android:state_checked="true"
         android:color="@color/app_primary_border" />
-    <item android:color="#E2E8F0" />
+    <item android:color="@color/app_border" />
 </selector>

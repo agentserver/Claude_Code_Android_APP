@@ -14,6 +14,88 @@
     <!-- TermuxApp DayNight NoActionBar theme. -->
     <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
 
+    <style name="Theme.ClaudeSettings.Light.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/app_primary</item>
+        <item name="colorPrimaryVariant">@color/app_primary</item>
+        <item name="colorPrimaryDark">@color/app_card_bg</item>
+        <item name="colorSecondary">@color/app_primary</item>
+        <item name="colorOnPrimary">@color/app_text_primary</item>
+        <item name="colorAccent">@color/app_primary</item>
+        <item name="colorControlNormal">@color/app_text_secondary</item>
+        <item name="colorControlActivated">@color/app_primary</item>
+        <item name="android:colorAccent">@color/app_primary</item>
+        <item name="android:windowBackground">@color/app_bg_secondary</item>
+        <item name="android:navigationBarColor">@color/app_card_bg</item>
+        <item name="android:statusBarColor">@color/app_bg_secondary</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:textColorPrimary">@color/app_text_primary</item>
+        <item name="android:textColorSecondary">@color/app_text_secondary</item>
+        <item name="android:textColorLink">@color/app_primary</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="preferenceTheme">@style/ThemeOverlay.ClaudeSettings.Preference</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog</item>
+    </style>
+
+    <style name="ThemeOverlay.ClaudeSettings.Preference" parent="@style/PreferenceThemeOverlay">
+        <item name="preferenceStyle">@style/Widget.ClaudeSettings.Preference</item>
+        <item name="preferenceScreenStyle">@style/Widget.ClaudeSettings.Preference</item>
+        <item name="preferenceCategoryStyle">@style/Widget.ClaudeSettings.PreferenceCategory</item>
+        <item name="dialogPreferenceStyle">@style/Widget.ClaudeSettings.DialogPreference</item>
+        <item name="dropdownPreferenceStyle">@style/Widget.ClaudeSettings.DropDownPreference</item>
+        <item name="switchPreferenceCompatStyle">@style/Widget.ClaudeSettings.SwitchPreferenceCompat</item>
+        <item name="seekBarPreferenceStyle">@style/Widget.ClaudeSettings.SeekBarPreference</item>
+        <item name="preferenceCategoryTitleTextColor">@color/app_primary</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.Preference" parent="@style/Preference.Material">
+        <item name="android:layout">@layout/preference_settings_item</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="singleLineTitle">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.PreferenceCategory" parent="@style/Preference.Category.Material">
+        <item name="android:layout">@layout/preference_settings_category</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.DialogPreference" parent="@style/Preference.DialogPreference.Material">
+        <item name="android:layout">@layout/preference_settings_item</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="singleLineTitle">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.DropDownPreference" parent="@style/Preference.DropDown.Material">
+        <item name="android:layout">@layout/preference_settings_item</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="singleLineTitle">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.SwitchPreferenceCompat" parent="@style/Preference.SwitchPreferenceCompat.Material">
+        <item name="android:layout">@layout/preference_settings_item</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="singleLineTitle">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="Widget.ClaudeSettings.SeekBarPreference" parent="@style/Preference.SeekBarPreference.Material">
+        <item name="android:layout">@layout/preference_settings_item</item>
+        <item name="allowDividerAbove">false</item>
+        <item name="allowDividerBelow">false</item>
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
 
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">

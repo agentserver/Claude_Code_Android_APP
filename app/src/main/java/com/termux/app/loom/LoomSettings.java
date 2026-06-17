@@ -43,7 +43,7 @@ public final class LoomSettings {
         String slaveName,
         String tags) {
         this.roleMode = roleMode;
-        this.agentProvider = agentProvider == null ? AssistantProvider.CLAUDE : agentProvider;
+        this.agentProvider = agentProvider == null ? AssistantProvider.CODEX : agentProvider;
         this.observerUrl = observerUrl;
         this.observerListenAddr = observerListenAddr;
         this.workspaceId = workspaceId;
@@ -57,8 +57,8 @@ public final class LoomSettings {
 
     public static LoomSettings defaults() {
         return new LoomSettings(
-            "all",
-            AssistantProvider.CLAUDE,
+            "slave",
+            AssistantProvider.CODEX,
             "http://127.0.0.1:8090",
             "127.0.0.1:8090",
             "ws-phone",
@@ -142,7 +142,7 @@ public final class LoomSettings {
         String driverName,
         String slaveName,
         String tags) {
-        AssistantProvider safeProvider = agentProvider == null ? AssistantProvider.CLAUDE : agentProvider;
+        AssistantProvider safeProvider = agentProvider == null ? AssistantProvider.CODEX : agentProvider;
         return new LoomSettings(roleMode, safeProvider, observerUrl, observerListenAddr, workspaceId, workspaceApiKey,
             agentServerUrl, observerName, driverName, slaveName, tags);
     }

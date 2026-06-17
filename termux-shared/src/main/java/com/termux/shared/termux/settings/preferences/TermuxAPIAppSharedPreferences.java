@@ -34,14 +34,9 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
      */
     @Nullable
     public static TermuxAPIAppSharedPreferences build(@NonNull final Context context) {
-        Context termuxAPIPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_API_PACKAGE_NAME);
-        if (termuxAPIPackageContext == null) {
-            if (TermuxConstants.TERMUX_PACKAGE_NAME.equals(context.getPackageName())) {
-                termuxAPIPackageContext = context;
-            } else {
-                return null;
-            }
-        }
+        Context termuxAPIPackageContext = getMergedApiPackageContext(context);
+        if (termuxAPIPackageContext == null)
+            return null;
         return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
     }
 
@@ -55,15 +50,20 @@ public class TermuxAPIAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxAPIAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     public static TermuxAPIAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
-        Context termuxAPIPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_API_PACKAGE_NAME, exitAppOnError);
-        if (termuxAPIPackageContext == null) {
-            if (TermuxConstants.TERMUX_PACKAGE_NAME.equals(context.getPackageName())) {
-                termuxAPIPackageContext = context;
-            } else {
-                return null;
-            }
-        }
+        Context termuxAPIPackageContext = getMergedApiPackageContext(context);
+        if (termuxAPIPackageContext == null)
+            termuxAPIPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_API_PACKAGE_NAME, exitAppOnError);
+        if (termuxAPIPackageContext == null)
+            return null;
         return new TermuxAPIAppSharedPreferences(termuxAPIPackageContext);
+    }
+
+    @Nullable
+    private static Context getMergedApiPackageContext(@NonNull final Context context) {
+        if (TermuxConstants.TERMUX_PACKAGE_NAME.equals(context.getPackageName()))
+            return context;
+
+        return PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_API_PACKAGE_NAME);
     }
 
 

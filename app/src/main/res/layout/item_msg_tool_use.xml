@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 工具调用：灰色气泡，标题行 + 可折叠详情 -->
+<!-- 工具调用：accent 色条气泡，标题行 + 可折叠详情 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -15,7 +15,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@drawable/bubble_thinking"
+        android:background="@drawable/bg_tool_bubble"
         android:clickable="true"
         android:focusable="true">
 
@@ -27,7 +27,7 @@
             android:paddingEnd="12dp"
             android:paddingTop="6dp"
             android:paddingBottom="6dp"
-            android:textColor="#666666"
+            android:textColor="@color/app_text_secondary"
             android:textSize="12sp"
             android:fontFamily="monospace" />
 
@@ -38,7 +38,7 @@
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
             android:paddingBottom="8dp"
-            android:textColor="#777777"
+            android:textColor="@color/app_text_muted"
             android:textSize="11sp"
             android:fontFamily="monospace"
             android:lineSpacingMultiplier="1.3"

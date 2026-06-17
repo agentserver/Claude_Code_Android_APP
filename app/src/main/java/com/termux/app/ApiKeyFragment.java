@@ -14,6 +14,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,7 +37,7 @@ public class ApiKeyFragment extends Fragment implements ApiKeyAdapter.Listener {
     private List<ApiKeyStore.Entry> mEntries;
     private ApiKeyAdapter          mAdapter;
     private TextView               mCountText;
-    private AssistantProvider      mProvider = AssistantProvider.CLAUDE;
+    private AssistantProvider      mProvider = AssistantProvider.CODEX;
     private MaterialButton         mBtnClaude;
     private MaterialButton         mBtnCodex;
     private TextView               mConfigTitle;
@@ -283,8 +284,8 @@ public class ApiKeyFragment extends Fragment implements ApiKeyAdapter.Listener {
     }
 
     private void updateProviderButton(MaterialButton button, boolean selected) {
-        int blue = 0xFF1976D2;
-        int white = 0xFFFFFFFF;
+        int blue = ContextCompat.getColor(requireContext(), R.color.app_primary);
+        int white = ContextCompat.getColor(requireContext(), R.color.app_card_bg);
         int background = selected ? blue : white;
         int text = selected ? white : blue;
 

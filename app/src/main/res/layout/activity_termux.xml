@@ -146,9 +146,11 @@
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/black"
-        app:itemIconTint="@color/white"
-        app:itemTextColor="@color/white"
+        android:background="@color/app_card_bg"
+        app:elevation="8dp"
+        app:itemIconTint="@color/bottom_nav_item_color"
+        app:itemRippleColor="@color/bottom_nav_item_ripple"
+        app:itemTextColor="@color/bottom_nav_item_color"
         app:labelVisibilityMode="labeled"
         app:menu="@menu/bottom_nav_menu" />
 

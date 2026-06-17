@@ -99,11 +99,13 @@ public class AgentTaskDetailFragment extends Fragment {
         mTitle.setText(preview.isEmpty() ? "AgentServer 任务" : preview);
         if (t.status == AgentTask.Status.RUNNING) {
             mStatus.setText("● 运行中");
-            mStatus.setBackgroundColor(0xFFF57C00);
+            mStatus.setTextColor(0xFFF59E0B);
+            mStatus.setBackgroundResource(R.drawable.bg_status_chip);
             mStatus.setVisibility(View.VISIBLE);
         } else {
             mStatus.setText("● 已完成");
-            mStatus.setBackgroundColor(0xFF388E3C);
+            mStatus.setTextColor(0xFF16A34A);
+            mStatus.setBackgroundResource(R.drawable.bg_status_chip);
             mStatus.setVisibility(View.VISIBLE);
             stopPolling();
         }

@@ -9,6 +9,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -61,6 +62,14 @@ public class AutomationSettingsFragment extends Fragment {
         recipesEmpty = view.findViewById(R.id.automation_recipes_empty);
         failuresEmpty = view.findViewById(R.id.automation_failures_empty);
         failuresContainer = view.findViewById(R.id.automation_failures_container);
+
+        view.findViewById(R.id.automation_back_button).setOnClickListener(v -> {
+            if (getActivity() instanceof TermuxActivity) {
+                ((TermuxActivity) getActivity()).navigateBackToSettingsHub();
+            } else if (getActivity() != null) {
+                getActivity().onBackPressed();
+            }
+        });
 
         enabledSwitch.setChecked(settingsStore.isBoostEnabled());
         enabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -205,7 +214,7 @@ public class AutomationSettingsFragment extends Fragment {
             row.setText("配方：" + failure.optString("recipe_id", "-")
                 + " · 步骤：" + failure.optString("step_id", "-")
                 + " · 原因：" + failure.optString("reason", "-"));
-            row.setTextColor(0xFF555555);
+            row.setTextColor(ContextCompat.getColor(requireContext(), R.color.app_text_secondary));
             row.setTextSize(12);
             row.setBackgroundResource(R.drawable.bg_status_chip);
             row.setPadding(dp(8), dp(6), dp(8), dp(6));

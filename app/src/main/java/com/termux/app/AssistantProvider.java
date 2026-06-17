@@ -12,6 +12,7 @@ public enum AssistantProvider {
 
     public static AssistantProvider fromId(String id) {
         if (CODEX.id.equals(id)) return CODEX;
-        return CLAUDE;
+        if (CLAUDE.id.equals(id)) return CLAUDE;
+        return CODEX;
     }
 }

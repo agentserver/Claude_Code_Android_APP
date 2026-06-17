@@ -25,20 +25,20 @@ public final class ProviderSettingsStore {
 
     public AssistantProvider getSelectedProvider() {
         AssistantProvider provider =
-            AssistantProvider.fromId(mPrefs.getString(KEY_SELECTED_PROVIDER, AssistantProvider.CLAUDE.id));
+            AssistantProvider.fromId(mPrefs.getString(KEY_SELECTED_PROVIDER, AssistantProvider.CODEX.id));
         writeProviderFile(mContext, provider);
         return provider;
     }
 
     public void setSelectedProvider(AssistantProvider provider) {
-        AssistantProvider safe = provider == null ? AssistantProvider.CLAUDE : provider;
+        AssistantProvider safe = provider == null ? AssistantProvider.CODEX : provider;
         mPrefs.edit().putString(KEY_SELECTED_PROVIDER, safe.id).apply();
         writeProviderFile(mContext, safe);
     }
 
     public static void writeProviderFile(Context context, AssistantProvider provider) {
         if (context == null) return;
-        AssistantProvider safe = provider == null ? AssistantProvider.CLAUDE : provider;
+        AssistantProvider safe = provider == null ? AssistantProvider.CODEX : provider;
         File providerFile = new File(context.getApplicationContext().getFilesDir(), PROVIDER_FILE_REL);
         File parent = providerFile.getParentFile();
         if (parent != null) parent.mkdirs();

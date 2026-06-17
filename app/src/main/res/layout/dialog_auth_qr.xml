@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="AgentServer 首次连接需要授权"
-        android:textColor="#212121"
+        android:textColor="@color/app_text_primary"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp" />
@@ -19,7 +19,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="用手机相机扫码，或复制下方链接到浏览器打开，完成授权后此弹窗会自动关闭。"
-        android:textColor="#666666"
+        android:textColor="@color/app_text_secondary"
         android:textSize="13sp"
         android:layout_marginBottom="16dp" />
 
@@ -28,7 +28,7 @@
         android:layout_width="240dp"
         android:layout_height="240dp"
         android:layout_gravity="center"
-        android:background="#FFFFFF"
+        android:background="@color/app_card_bg"
         android:contentDescription="授权二维码"
         android:layout_marginBottom="14dp" />
 
@@ -36,10 +36,10 @@
         android:id="@+id/auth_url_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#1976D2"
+        android:textColor="@color/app_primary"
         android:textSize="12sp"
         android:fontFamily="monospace"
-        android:background="#F0F0F0"
+        android:background="@color/app_bg_tertiary"
         android:padding="10dp"
         android:textIsSelectable="true"
         android:layout_marginBottom="12dp"
@@ -69,8 +69,8 @@
             android:layout_height="40dp"
             android:text="浏览器打开"
             android:textSize="13sp"
-            android:textColor="@android:color/white"
-            android:backgroundTint="#1976D2"
+            android:textColor="@color/app_on_primary"
+            android:backgroundTint="@color/app_primary"
             android:insetTop="0dp"
             android:insetBottom="0dp" />
 

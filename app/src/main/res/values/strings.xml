@@ -139,11 +139,11 @@
 
 
     <!-- Termux Settings -->
-    <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Settings</string>
+    <string name="title_activity_termux_settings">应用设置</string>
 
     <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">Preferences for &TERMUX_APP_NAME; app</string>
+    <string name="termux_preferences_title">终端设置</string>
+    <string name="termux_preferences_summary">键盘、终端显示和调试选项</string>
 
     <string name="automation_boost_preferences_title">自动化 Boost</string>
     <string name="automation_boost_preferences_summary">管理快速路径、应用白名单和已学习的动作配方</string>
@@ -156,93 +156,88 @@
     <string name="automation_boost_empty_failures">暂无 Boost 失败记录</string>
 
         <!-- Debugging Preferences -->
-        <string name="termux_debugging_preferences_title">Debugging</string>
-        <string name="termux_debugging_preferences_summary">Preferences for debugging</string>
+        <string name="termux_debugging_preferences_title">调试</string>
+        <string name="termux_debugging_preferences_summary">日志级别、崩溃提示和调试输出</string>
 
             <!-- Logging Category -->
-            <string name="termux_logging_header">Logging</string>
+            <string name="termux_logging_header">日志</string>
 
                 <!-- Log Level -->
-                <string name="termux_log_level_title">Log Level</string>
+                <string name="termux_log_level_title">日志级别</string>
 
                 <!-- Terminal View Key Logging -->
-                <string name="termux_terminal_view_key_logging_enabled_title">Terminal View Key Logging</string>
-                <string name="termux_terminal_view_key_logging_enabled_off">Logs will not have entries for terminal view keys. (Default)</string>
-                <string name="termux_terminal_view_key_logging_enabled_on">Logcat logs will have entries for terminal view keys.
-                    These are very verbose and should be disabled under normal circumstances or will cause performance issues.</string>
+                <string name="termux_terminal_view_key_logging_enabled_title">记录终端按键</string>
+                <string name="termux_terminal_view_key_logging_enabled_off">日志中不会记录终端按键。</string>
+                <string name="termux_terminal_view_key_logging_enabled_on">Logcat 会记录终端按键，信息较多，通常不建议开启。</string>
 
                 <!-- Plugin Error Notifications -->
-                <string name="termux_plugin_error_notifications_enabled_title">Plugin Error Notifications</string>
-                <string name="termux_plugin_error_notifications_enabled_off">Disable flashes and notifications for plugin errors.</string>
-                <string name="termux_plugin_error_notifications_enabled_on">Show flashes and notifications for plugin errors. (Default)</string>
+                <string name="termux_plugin_error_notifications_enabled_title">插件错误提示</string>
+                <string name="termux_plugin_error_notifications_enabled_off">不显示插件错误提示。</string>
+                <string name="termux_plugin_error_notifications_enabled_on">显示插件错误提示。</string>
 
                 <!-- Crash Report Notifications -->
-                <string name="termux_crash_report_notifications_enabled_title">Crash Report Notifications</string>
-                <string name="termux_crash_report_notifications_enabled_off">Disable notifications for crash reports.</string>
-                <string name="termux_crash_report_notifications_enabled_on">Show notifications for crash reports. (Default)</string>
+                <string name="termux_crash_report_notifications_enabled_title">崩溃报告提示</string>
+                <string name="termux_crash_report_notifications_enabled_off">不显示崩溃报告提示。</string>
+                <string name="termux_crash_report_notifications_enabled_on">显示崩溃报告提示。</string>
 
 
         <!-- Terminal IO Preferences -->
-        <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
-        <string name="termux_terminal_io_preferences_summary">Preferences for terminal I/O</string>
+        <string name="termux_terminal_io_preferences_title">终端输入</string>
+        <string name="termux_terminal_io_preferences_summary">软键盘和输入行为</string>
 
             <!-- Keyboard Category -->
-            <string name="termux_keyboard_header">Keyboard</string>
+            <string name="termux_keyboard_header">键盘</string>
 
                 <!-- Soft Keyboard -->
-                <string name="termux_soft_keyboard_enabled_title">Soft Keyboard Enabled</string>
-                <string name="termux_soft_keyboard_enabled_off">Soft keyboard will be disabled.</string>
-                <string name="termux_soft_keyboard_enabled_on">Soft keyboard will be enabled. (Default)</string>
+                <string name="termux_soft_keyboard_enabled_title">启用软键盘</string>
+                <string name="termux_soft_keyboard_enabled_off">软键盘将被禁用。</string>
+                <string name="termux_soft_keyboard_enabled_on">软键盘将被启用。</string>
 
                 <!-- Soft Keyboard Only If No Hardware-->
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft Keyboard Only If No Hardware</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Soft keyboard will be enabled even if
-                    hardware keyboard is connected. (Default)</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Soft keyboard will be enabled only if
-                    no hardware keyboard is connected.</string>
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">仅无硬件键盘时显示</string>
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">即使连接硬件键盘，也显示软键盘。</string>
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">只有未连接硬件键盘时显示软键盘。</string>
 
 
         <!-- Terminal View Preferences -->
-        <string name="termux_terminal_view_preferences_title">Terminal View</string>
-        <string name="termux_terminal_view_preferences_summary">Preferences for terminal view</string>
+        <string name="termux_terminal_view_preferences_title">终端显示</string>
+        <string name="termux_terminal_view_preferences_summary">边距和终端显示行为</string>
 
             <!-- View Category -->
-            <string name="termux_terminal_view_view_header">View</string>
+            <string name="termux_terminal_view_view_header">显示</string>
 
                 <!-- Terminal View Margin Adjustment -->
-                <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal Margin Adjustment</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_off">Terminal margin adjustment will be disabled.</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_on">Terminal margin adjustment will be enabled.
-                    It should be enabled to try to fix the issue where soft keyboard covers part of extra keys/terminal view.
-                    If it causes screen flickering on your devices, then disable it. (Default)</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_title">终端边距自适应</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_off">不调整终端边距。</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_on">启用边距调整，用于减少软键盘遮挡终端的问题。</string>
 
 
 
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Preferences for &TERMUX_API_APP_NAME; app</string>
-    <string name="termux_api_tools_title">API Tools</string>
-    <string name="termux_api_tools_summary">Run built-in API commands and view output</string>
-    <string name="title_activity_api_tools">API Tools</string>
-    <string name="api_tools_description">Run built-in Termux API commands and inspect output.</string>
-    <string name="api_tools_status_ready">Ready</string>
-    <string name="api_tools_status_running">Running: %1$s</string>
-    <string name="api_tools_status_permission">Permission needed: %1$s</string>
-    <string name="api_tools_status_permission_denied">Permission denied. Grant it and try again.</string>
-    <string name="api_tools_output_label">Output</string>
-    <string name="api_tools_output_hint">Output will appear here.</string>
-    <string name="api_tools_output_empty">(empty)</string>
-    <string name="api_tools_output_error">Error: %1$s</string>
-    <string name="api_tools_button_battery">Battery Status</string>
-    <string name="api_tools_button_camera">Camera Info</string>
-    <string name="api_tools_button_sensor">Sensor List</string>
-    <string name="api_tools_button_wifi">Wi-Fi Connection Info</string>
-    <string name="api_tools_button_clipboard">Clipboard Get</string>
-    <string name="api_tools_button_clear">Clear Output</string>
+    <string name="termux_api_preferences_title">设备 API 工具</string>
+    <string name="termux_api_preferences_summary">检查电池、相机、传感器、Wi-Fi 和剪贴板能力</string>
+    <string name="termux_api_tools_title">设备 API 自检</string>
+    <string name="termux_api_tools_summary">运行内置设备 API 命令并查看输出</string>
+    <string name="title_activity_api_tools">设备 API 自检</string>
+    <string name="api_tools_description">运行内置设备 API 命令，用于确认 Agent 可调用的手机能力。</string>
+    <string name="api_tools_status_ready">就绪</string>
+    <string name="api_tools_status_running">运行中：%1$s</string>
+    <string name="api_tools_status_permission">需要权限：%1$s</string>
+    <string name="api_tools_status_permission_denied">权限被拒绝，请授权后重试。</string>
+    <string name="api_tools_output_label">输出结果</string>
+    <string name="api_tools_output_hint">输出会显示在这里。</string>
+    <string name="api_tools_output_empty">（空）</string>
+    <string name="api_tools_output_error">错误：%1$s</string>
+    <string name="api_tools_button_battery">电池状态</string>
+    <string name="api_tools_button_camera">相机信息</string>
+    <string name="api_tools_button_sensor">传感器列表</string>
+    <string name="api_tools_button_wifi">Wi-Fi 连接信息</string>
+    <string name="api_tools_button_clipboard">读取剪贴板</string>
+    <string name="api_tools_button_clear">清空输出</string>
 
-    <string name="api_self_check_title">API self-check (tap for tools)</string>
+    <string name="api_self_check_title">设备 API 自检（点击打开工具）</string>
     <string name="api_self_check_item">%1$s: %2$s</string>
-    <string name="api_self_check_status_running">API self-check: running...</string>
+    <string name="api_self_check_status_running">设备 API 自检：运行中...</string>
     <string name="api_self_check_status_ok">OK</string>
     <string name="api_self_check_status_empty">OK (empty)</string>
     <string name="api_self_check_status_note">OK (%1$s)</string>
@@ -252,27 +247,21 @@
 
 
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferences for &TERMUX_FLOAT_APP_NAME; app</string>
+    <string name="termux_float_preferences_title">悬浮窗口设置</string>
+    <string name="termux_float_preferences_summary">悬浮窗口调试和运行选项</string>
 
 
 
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferences for &TERMUX_TASKER_APP_NAME; app</string>
+    <string name="termux_tasker_preferences_title">任务集成设置</string>
+    <string name="termux_tasker_preferences_summary">外部任务调用和调试选项</string>
 
 
 
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Preferences for &TERMUX_WIDGET_APP_NAME; app</string>
+    <string name="termux_widget_preferences_title">小组件设置</string>
+    <string name="termux_widget_preferences_summary">桌面小组件调试和运行选项</string>
 
 
-
-    <!-- About Preference -->
-    <string name="about_preference_title">About</string>
-
-    <!-- Donate Preference -->
-    <string name="donate_preference_title">Donate</string>
 
 </resources>

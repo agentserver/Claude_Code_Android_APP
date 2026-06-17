@@ -55,3 +55,7 @@ task.jsonl
 .worktrees/
 __pycache__/
 *.pyc*
+
+# Local private deployment notes and secrets.
+# Never commit connector tokens, local runtime keys, or per-device fill-in data.
+local_private/

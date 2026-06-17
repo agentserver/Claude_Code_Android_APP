@@ -12,14 +12,14 @@ import org.robolectric.RuntimeEnvironment;
 public class ProviderSettingsStoreTest {
 
     @Test
-    public void defaultsToClaude() {
+    public void defaultsToCodex() {
         Context context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences(ProviderSettingsStore.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().clear().commit();
 
         ProviderSettingsStore store = new ProviderSettingsStore(context);
 
-        Assert.assertEquals(AssistantProvider.CLAUDE, store.getSelectedProvider());
+        Assert.assertEquals(AssistantProvider.CODEX, store.getSelectedProvider());
     }
 
     @Test

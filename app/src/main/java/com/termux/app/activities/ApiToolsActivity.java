@@ -3,16 +3,22 @@ package com.termux.app.activities;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.View;
+import android.view.Window;
 import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.termux.R;
 import com.termux.api.apis.BatteryStatusAPI;
@@ -21,7 +27,6 @@ import com.termux.api.apis.ClipboardAPI;
 import com.termux.api.apis.SensorAPI;
 import com.termux.api.apis.WifiAPI;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
-import com.termux.shared.theme.NightMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,11 +47,12 @@ public class ApiToolsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
+        getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         setContentView(R.layout.activity_api_tools);
 
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+        applySettingsChrome();
 
         mExecutor = Executors.newSingleThreadExecutor();
         mStatusView = findViewById(R.id.api_tools_status);
@@ -71,6 +77,37 @@ public class ApiToolsActivity extends AppCompatActivity {
         clearButton.setOnClickListener(v -> mOutputView.setText(""));
 
         setStatus(getString(R.string.api_tools_status_ready));
+    }
+
+    private void applySettingsChrome() {
+        Window window = getWindow();
+        int backgroundColor = ContextCompat.getColor(this, R.color.app_bg_secondary);
+        int surfaceColor = ContextCompat.getColor(this, R.color.app_card_bg);
+        int primaryColor = ContextCompat.getColor(this, R.color.app_primary);
+        int textColor = ContextCompat.getColor(this, R.color.app_text_primary);
+
+        window.setStatusBarColor(backgroundColor);
+        window.setNavigationBarColor(surfaceColor);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            window.getDecorView().setSystemUiVisibility(flags);
+        }
+
+        Toolbar toolbar = findViewById(com.termux.shared.R.id.toolbar);
+        if (toolbar != null) {
+            toolbar.setBackgroundColor(surfaceColor);
+            toolbar.setTitleTextColor(textColor);
+            toolbar.setSubtitleTextColor(ContextCompat.getColor(this, R.color.app_text_secondary));
+            Drawable navigationIcon = toolbar.getNavigationIcon();
+            if (navigationIcon != null) {
+                Drawable wrappedIcon = DrawableCompat.wrap(navigationIcon).mutate();
+                DrawableCompat.setTint(wrappedIcon, primaryColor);
+                toolbar.setNavigationIcon(wrappedIcon);
+            }
+        }
     }
 
     @Override

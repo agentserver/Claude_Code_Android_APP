@@ -1,15 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B1E2B</color>
+
+    <!-- ── Brand ─────────────────────────────────────────── -->
     <color name="app_primary">#2563EB</color>
     <color name="app_primary_surface">#EFF6FF</color>
     <color name="app_primary_border">#BFDBFE</color>
+    <color name="app_secondary">#6366F1</color>
+    <color name="app_accent">#059669</color>
+    <color name="app_on_primary">#FFFFFF</color>
+    <color name="app_on_accent">#FFFFFF</color>
+    <color name="app_primary_soft">#DBEAFE</color>
+    <color name="app_secondary_surface">#EEF2FF</color>
+    <color name="app_accent_surface">#ECFDF5</color>
+    <color name="app_slate_surface">#F1F5F9</color>
+
+    <!-- ── Text ──────────────────────────────────────────── -->
     <color name="app_text_primary">#111827</color>
     <color name="app_text_secondary">#475569</color>
     <color name="app_text_muted">#64748B</color>
-    <color name="app_border">#E2E8F0</color>
+    <color name="app_text_hint">#94A3B8</color>
+
+    <!-- ── Surfaces & Backgrounds ────────────────────────── -->
+    <color name="app_bg_primary">#FFFFFF</color>
+    <color name="app_bg_secondary">#F8FAFC</color>
+    <color name="app_bg_tertiary">#F1F5F9</color>
     <color name="app_surface">#F8FAFC</color>
+    <color name="app_card_bg">#FFFFFF</color>
+    <color name="app_header_bg">#F8FAFC</color>
+    <color name="app_input_bg">#F1F5F9</color>
+    <color name="app_log_bg">#F1F5F9</color>
+
+    <!-- ── Borders ───────────────────────────────────────── -->
+    <color name="app_border">#E2E8F0</color>
+    <color name="app_border_light">#F1F5F9</color>
+
+    <!-- ── Chat Bubbles ──────────────────────────────────── -->
+    <color name="app_bubble_user">#2563EB</color>
+    <color name="app_bubble_assistant">#F1F5F9</color>
+    <color name="app_bubble_thinking">#F8FAFC</color>
+    <color name="app_bubble_thinking_stroke">#E2E8F0</color>
+    <color name="app_bubble_tool">#F8FAFC</color>
+    <color name="app_bubble_tool_accent">#6366F1</color>
+
+    <!-- ── Status ────────────────────────────────────────── -->
     <color name="app_success">#16A34A</color>
     <color name="app_warning">#F59E0B</color>
     <color name="app_danger">#DC2626</color>
+    <color name="app_success_surface">#ECFDF5</color>
+    <color name="app_warning_surface">#FFFBEB</color>
+    <color name="app_danger_surface">#FEF2F2</color>
+    <color name="app_status_active">#2563EB</color>
+    <color name="app_status_connected">#16A34A</color>
+
+    <!-- ── Automation switch (referenced by selector) ────── -->
+    <color name="automation_switch_thumb_on">#2563EB</color>
+    <color name="automation_switch_thumb_off">#F1F5F9</color>
+    <color name="automation_switch_track_on">#BFDBFE</color>
+    <color name="automation_switch_track_off">#E2E8F0</color>
 </resources>

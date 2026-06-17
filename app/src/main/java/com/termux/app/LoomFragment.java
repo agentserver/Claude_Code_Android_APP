@@ -13,7 +13,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ScrollView;
@@ -38,11 +37,17 @@ import java.util.regex.Pattern;
 
 public class LoomFragment extends Fragment {
 
+    private static final String AGENTSERVER_PREFS_NAME = "agentserver_config";
+    private static final String KEY_AGENTSERVER_URL = "server_url";
+    private static final String KEY_AGENTSERVER_SANDBOX_CODE = "sandbox_code";
+    private static final String KEY_AGENTSERVER_SANDBOX_ID = "sandbox_id";
+    private static final String KEY_AGENTSERVER_WORKSPACE_ID = "workspace_id";
+
     private static final String[] ROLE_LABELS = {
-        "All-in-one", "Observer", "Driver", "Slave"
+        "Observer", "Slave"
     };
     private static final String[] ROLE_VALUES = {
-        "all", "observer", "driver", "slave"
+        "observer", "slave"
     };
     private static final Pattern AUTH_URL_PATTERN =
         Pattern.compile("https?://[\\w.-]+(?:/[\\w./?=&%+-]*)?");
@@ -55,19 +60,11 @@ public class LoomFragment extends Fragment {
     private TextView mLogLabel;
     private ScrollView mLogScroll;
     private EditText mObserverUrl;
-    private EditText mWorkspaceId;
-    private EditText mWorkspaceApiKey;
-    private EditText mAgentServerUrl;
+    private EditText mObserverApiKey;
     private EditText mObserverName;
     private EditText mDriverName;
     private EditText mSlaveName;
     private EditText mTags;
-    private TextView mSetupButton;
-    private View mStartObserverButton;
-    private View mStopObserverButton;
-    private View mRegisterDriverButton;
-    private View mStartSlaveButton;
-    private View mStopSlaveButton;
 
     private Thread mActiveThread;
     private Process mActiveProcess;
@@ -114,19 +111,11 @@ public class LoomFragment extends Fragment {
         mLogLabel = v.findViewById(R.id.loom_log_label);
         mLogScroll = v.findViewById(R.id.loom_log_scroll);
         mObserverUrl = v.findViewById(R.id.loom_observer_url);
-        mWorkspaceId = v.findViewById(R.id.loom_workspace_id);
-        mWorkspaceApiKey = v.findViewById(R.id.loom_workspace_api_key);
-        mAgentServerUrl = v.findViewById(R.id.loom_agentserver_url);
+        mObserverApiKey = v.findViewById(R.id.loom_observer_api_key);
         mObserverName = v.findViewById(R.id.loom_observer_name);
         mDriverName = v.findViewById(R.id.loom_driver_name);
         mSlaveName = v.findViewById(R.id.loom_slave_name);
         mTags = v.findViewById(R.id.loom_tags);
-        mSetupButton = v.findViewById(R.id.btn_loom_setup);
-        mStartObserverButton = v.findViewById(R.id.btn_loom_start_observer);
-        mStopObserverButton = v.findViewById(R.id.btn_loom_stop_observer);
-        mRegisterDriverButton = v.findViewById(R.id.btn_loom_register_driver);
-        mStartSlaveButton = v.findViewById(R.id.btn_loom_start_slave);
-        mStopSlaveButton = v.findViewById(R.id.btn_loom_stop_slave);
     }
 
     private void setupRoleSpinner() {
@@ -134,85 +123,35 @@ public class LoomFragment extends Fragment {
             android.R.layout.simple_spinner_item, ROLE_LABELS);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mRoleMode.setAdapter(adapter);
-        mRoleMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                updateRoleActions();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                updateRoleActions();
-            }
-        });
     }
 
     private void wireButtons(View v) {
+        v.findViewById(R.id.loom_back_button).setOnClickListener(b -> {
+            if (getActivity() instanceof TermuxActivity) {
+                ((TermuxActivity) getActivity()).navigateBackToCollaboration();
+            }
+        });
         v.findViewById(R.id.btn_loom_save).setOnClickListener(b -> {
             savePrefs();
             Toast.makeText(getContext(), "Loom 设置已保存", Toast.LENGTH_SHORT).show();
         });
         v.findViewById(R.id.btn_loom_status).setOnClickListener(b ->
             runScript(LoomCommandBuilder.statusScript(prefix(), runtimeSettings()), "Loom 状态", null));
-        v.findViewById(R.id.btn_loom_setup).setOnClickListener(b -> runSetupForSelectedRole());
-        v.findViewById(R.id.btn_loom_start_observer).setOnClickListener(b -> {
-            LoomSettings settings = currentSettings();
-            String script = transitionScript(settings, "observer")
-                + LoomCommandBuilder.startObserverScript(prefix(), settings);
-            rememberRuntimeProvider(settings);
-            runScript(script, "启动 Observer", null);
-        });
-        v.findViewById(R.id.btn_loom_stop_observer).setOnClickListener(b ->
-            runScript(LoomCommandBuilder.stopObserverScript(runtimeSettings()), "停止 Observer", null));
-        v.findViewById(R.id.btn_loom_register_driver).setOnClickListener(b -> {
-            LoomSettings settings = currentSettings();
-            mAuthDialogShown = false;
-            mAuthUrlExpected = false;
-            runScript(LoomCommandBuilder.registerDriverScript(settings), "注册 Driver", this::maybeShowAuthUrl);
-        });
-        v.findViewById(R.id.btn_loom_start_slave).setOnClickListener(b -> {
-            LoomSettings settings = currentSettings();
-            String script = transitionScript(settings, "slave")
-                + LoomCommandBuilder.startSlaveScript(prefix(), settings);
-            mAuthDialogShown = false;
-            mAuthUrlExpected = false;
-            rememberRuntimeProvider(settings);
-            runScript(script, "启动 Slave", this::maybeShowAuthUrl);
-        });
-        v.findViewById(R.id.btn_loom_stop_slave).setOnClickListener(b ->
-            runScript(LoomCommandBuilder.stopSlaveScript(runtimeSettings()), "停止 Slave", null));
         v.findViewById(R.id.btn_loom_monitor).setOnClickListener(b -> monitorLogs());
         v.findViewById(R.id.btn_loom_clear_log).setOnClickListener(b -> clearLog());
     }
 
-    private void runSetupForSelectedRole() {
-        savePrefs();
-        LoomSettings settings = currentSettings();
-        if ("all".equals(selectedRoleMode())) {
-            mAuthDialogShown = false;
-            mAuthUrlExpected = false;
-            String script = transitionScript(settings, "all")
-                + LoomCommandBuilder.startAllInOneScript(prefix(), settings);
-            rememberRuntimeProvider(settings);
-            runScript(script,
-                "启动 All-in-one", this::maybeShowAuthUrl);
-        } else {
-            runScript(LoomCommandBuilder.setupConfigScript(settings), "生成 Loom 配置", null);
-        }
-    }
-
     private LoomSettings currentSettings() {
         LoomSettings d = LoomSettings.defaults();
-        return d.withRoleMode(selectedRoleMode())
+        LoomSettings settings = d.withRoleMode(selectedRoleMode())
             .withObserverUrl(valueOrDefault(mObserverUrl, d.observerUrl))
-            .withWorkspaceId(valueOrDefault(mWorkspaceId, d.workspaceId))
-            .withWorkspaceApiKey(valueOrDefault(mWorkspaceApiKey, d.workspaceApiKey))
-            .withAgentServerUrl(valueOrDefault(mAgentServerUrl, d.agentServerUrl))
+            .withWorkspaceApiKey(valueOrDefault(mObserverApiKey, d.workspaceApiKey))
             .withObserverName(valueOrDefault(mObserverName, d.observerName))
             .withDriverName(valueOrDefault(mDriverName, d.driverName))
             .withSlaveName(valueOrDefault(mSlaveName, d.slaveName))
             .withTags(valueOrDefault(mTags, d.tags))
             .withAgentProvider(new ProviderSettingsStore(requireContext()).getSelectedProvider());
+        return agentServerBackedSettings(settings);
     }
 
     private void loadPrefs() {
@@ -220,16 +159,14 @@ public class LoomFragment extends Fragment {
         SharedPreferences p = requireContext()
             .getSharedPreferences(LoomSettings.PREFS_NAME, Context.MODE_PRIVATE);
         mObserverUrl.setText(prefOrDefault(p, LoomSettings.KEY_OBSERVER_URL, d.observerUrl));
-        mWorkspaceId.setText(prefOrDefault(p, LoomSettings.KEY_WORKSPACE_ID, d.workspaceId));
-        mWorkspaceApiKey.setText(prefOrDefault(p, LoomSettings.KEY_WORKSPACE_API_KEY, d.workspaceApiKey));
-        mAgentServerUrl.setText(prefOrDefault(p, LoomSettings.KEY_AGENTSERVER_URL, d.agentServerUrl));
+        mObserverApiKey.setText(prefOrDefault(p, LoomSettings.KEY_WORKSPACE_API_KEY, d.workspaceApiKey));
         mObserverName.setText(prefOrDefault(p, LoomSettings.KEY_OBSERVER_NAME, d.observerName));
         mDriverName.setText(prefOrDefault(p, LoomSettings.KEY_DRIVER_NAME, d.driverName));
         mSlaveName.setText(prefOrDefault(p, LoomSettings.KEY_SLAVE_NAME, d.slaveName));
         mTags.setText(prefOrDefault(p, LoomSettings.KEY_TAGS, d.tags));
-        mRoleMode.setSelection(indexOfRole(p.getString(LoomSettings.KEY_ROLE_MODE, d.roleMode)), false);
+        mRoleMode.setSelection(indexOfRole(normalizeRole(
+            p.getString(LoomSettings.KEY_ROLE_MODE, d.roleMode))), false);
         refreshProviderText();
-        updateRoleActions();
     }
 
     private void savePrefs() {
@@ -238,9 +175,7 @@ public class LoomFragment extends Fragment {
             .edit()
             .putString(LoomSettings.KEY_ROLE_MODE, selectedRoleMode())
             .putString(LoomSettings.KEY_OBSERVER_URL, valueOrDefault(mObserverUrl, d.observerUrl))
-            .putString(LoomSettings.KEY_WORKSPACE_ID, valueOrDefault(mWorkspaceId, d.workspaceId))
-            .putString(LoomSettings.KEY_WORKSPACE_API_KEY, valueOrDefault(mWorkspaceApiKey, d.workspaceApiKey))
-            .putString(LoomSettings.KEY_AGENTSERVER_URL, valueOrDefault(mAgentServerUrl, d.agentServerUrl))
+            .putString(LoomSettings.KEY_WORKSPACE_API_KEY, valueOrDefault(mObserverApiKey, d.workspaceApiKey))
             .putString(LoomSettings.KEY_OBSERVER_NAME, valueOrDefault(mObserverName, d.observerName))
             .putString(LoomSettings.KEY_DRIVER_NAME, valueOrDefault(mDriverName, d.driverName))
             .putString(LoomSettings.KEY_SLAVE_NAME, valueOrDefault(mSlaveName, d.slaveName))
@@ -248,29 +183,12 @@ public class LoomFragment extends Fragment {
             .apply();
     }
 
-    private void updateRoleActions() {
-        String role = selectedRoleMode();
-        boolean all = "all".equals(role);
-        boolean observer = all || "observer".equals(role);
-        boolean driver = all || "driver".equals(role);
-        boolean slave = all || "slave".equals(role);
-
-        if (mSetupButton != null) {
-            mSetupButton.setText(all ? "启动 All-in-one" : "生成配置");
-        }
-        if (mStartObserverButton != null) mStartObserverButton.setVisibility(observer ? View.VISIBLE : View.GONE);
-        if (mStopObserverButton != null) mStopObserverButton.setVisibility(observer ? View.VISIBLE : View.GONE);
-        if (mRegisterDriverButton != null) mRegisterDriverButton.setVisibility(driver ? View.VISIBLE : View.GONE);
-        if (mStartSlaveButton != null) mStartSlaveButton.setVisibility(slave ? View.VISIBLE : View.GONE);
-        if (mStopSlaveButton != null) mStopSlaveButton.setVisibility(slave ? View.VISIBLE : View.GONE);
-    }
-
     private void monitorLogs() {
         mMonitoring = true;
         String p = prefix();
         String observerLog = p + "/../home/loom-observer.log";
         String slaveLog = p + "/../home/loom-slave.log";
-        String driverLog = p + "/../home/loom-driver-register.log";
+        String driverLog = p + "/../home/loom-driver-bind.log";
         String script = ""
             + "echo '== Loom logs =='\n"
             + "tail -n 60 " + sq(observerLog) + " 2>/dev/null || true\n"
@@ -425,15 +343,20 @@ public class LoomFragment extends Fragment {
 
     private String selectedRoleMode() {
         int pos = mRoleMode == null ? 0 : mRoleMode.getSelectedItemPosition();
-        if (pos < 0 || pos >= ROLE_VALUES.length) return "all";
+        if (pos < 0 || pos >= ROLE_VALUES.length) return "slave";
         return ROLE_VALUES[pos];
     }
 
     private int indexOfRole(String role) {
+        String safeRole = normalizeRole(role);
         for (int i = 0; i < ROLE_VALUES.length; i++) {
-            if (ROLE_VALUES[i].equals(role)) return i;
+            if (ROLE_VALUES[i].equals(safeRole)) return i;
         }
-        return 0;
+        return 1;
+    }
+
+    private static String normalizeRole(String role) {
+        return "observer".equals(role) ? "observer" : "slave";
     }
 
     private String valueOrDefault(EditText view, String defaultValue) {
@@ -492,6 +415,18 @@ public class LoomFragment extends Fragment {
         return runtimeProvider == null ? settings : settings.withAgentProvider(runtimeProvider);
     }
 
+    private LoomSettings agentServerBackedSettings(LoomSettings settings) {
+        SharedPreferences p = requireContext()
+            .getSharedPreferences(AGENTSERVER_PREFS_NAME, Context.MODE_PRIVATE);
+        String serverUrl = prefOrDefault(p, KEY_AGENTSERVER_URL, settings.agentServerUrl);
+        String workspaceId = firstNonEmpty(
+            p.getString(KEY_AGENTSERVER_WORKSPACE_ID, ""),
+            p.getString(KEY_AGENTSERVER_SANDBOX_CODE, ""),
+            p.getString(KEY_AGENTSERVER_SANDBOX_ID, ""),
+            settings.workspaceId);
+        return settings.withAgentServerUrl(serverUrl).withWorkspaceId(workspaceId);
+    }
+
     @Nullable
     private AssistantProvider savedRuntimeProvider() {
         if (getContext() == null) return null;
@@ -522,10 +457,15 @@ public class LoomFragment extends Fragment {
         if ("slave".equals(role)) {
             return header + LoomCommandBuilder.stopSlaveScript(previousSettings) + "\n";
         }
-        if ("all".equals(role)) {
-            return header
-                + LoomCommandBuilder.stopObserverScript(previousSettings) + "\n"
-                + LoomCommandBuilder.stopSlaveScript(previousSettings) + "\n";
+        return "";
+    }
+
+    private static String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
         }
         return "";
     }

@@ -57,7 +57,11 @@ public class AutoLoomManagerScriptTest {
         assertTrue(script.contains("/home/claude/.loom/observer-local"));
         assertTrue(script.contains("/home/claude/.loom/slave-local"));
         assertTrue(script.contains("/home/claude/loom-driver"));
+        assertTrue(script.contains("/home/codex/.loom/observer-local"));
+        assertTrue(script.contains("/home/codex/.loom/slave-local"));
+        assertTrue(script.contains("/home/codex/loom-driver"));
         assertTrue(script.contains("chown -R claude:claude /home/claude/.loom /home/claude/loom-driver"));
+        assertTrue(script.contains("chown -R codex:codex /home/codex/.loom /home/codex/loom-driver /home/codex/.codex"));
     }
 
     @Test
@@ -69,6 +73,8 @@ public class AutoLoomManagerScriptTest {
         assertTrue(script.contains("\"$_tmpdir/loom/bin/slave-agent\""));
         assertTrue(script.contains("\"$_tmpdir/loom/skills\""));
         assertTrue(script.contains("/home/claude/loom-driver/.claude/skills"));
+        assertTrue(script.contains("/home/codex/.codex/skills/loom-driver"));
+        assertTrue(script.contains("/home/codex/loom-driver/AGENTS.md"));
     }
 
     @Test

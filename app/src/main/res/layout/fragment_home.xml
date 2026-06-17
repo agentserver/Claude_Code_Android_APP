@@ -11,13 +11,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="#FFFFFF">
+        android:background="@color/app_bg_primary">
 
         <!-- 状态栏 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FAFAFA"
+            android:background="@drawable/bg_home_bar"
             android:orientation="vertical"
             android:paddingStart="8dp"
             android:paddingTop="8dp"
@@ -125,109 +125,99 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="#FFFFFF"
+            android:background="@color/app_bg_primary"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:clipToPadding="false"
             android:scrollbars="vertical" />
 
-        <!-- 底部操作区 -->
+        <!-- 底部操作区（精简版） -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#F5F5F5"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
+            android:background="@drawable/bg_home_bar"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:paddingTop="6dp"
             android:paddingBottom="6dp">
 
-            <!-- 快捷操作按钮行 -->
+            <!-- 设备能力状态（紧凑单行） -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_stop_claude"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp"
-                    android:minHeight="44dp"
-                    android:text="打断"
-                    android:textSize="13sp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:backgroundTint="@color/app_danger"
-                    android:textColor="@android:color/white" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_new_session"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:minHeight="44dp"
-                    android:text="新建对话"
-                    android:textColor="@color/app_text_secondary"
-                    android:textSize="13sp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    app:strokeColor="@color/app_border" />
-
-            </LinearLayout>
-
-            <!-- 设备能力状态 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="4dp">
+                android:layout_marginBottom="6dp">
 
                 <TextView
                     android:id="@+id/accessibility_status"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:background="@drawable/bg_status_chip"
                     android:clickable="true"
-                    android:ellipsize="end"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
                     android:maxLines="1"
                     android:minHeight="44dp"
                     android:paddingStart="8dp"
-                    android:paddingTop="8dp"
+                    android:paddingTop="4dp"
                     android:paddingEnd="8dp"
-                    android:paddingBottom="8dp"
-                    android:text="● 无障碍: 未启用"
+                    android:paddingBottom="4dp"
+                    android:text="● 无障碍"
                     android:textColor="@color/app_text_muted"
                     android:textSize="11sp" />
 
                 <TextView
                     android:id="@+id/screen_capture_status"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:layout_weight="1"
                     android:background="@drawable/bg_status_chip"
                     android:clickable="true"
-                    android:ellipsize="end"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
                     android:maxLines="1"
                     android:minHeight="44dp"
                     android:paddingStart="8dp"
-                    android:paddingTop="8dp"
+                    android:paddingTop="4dp"
                     android:paddingEnd="8dp"
-                    android:paddingBottom="8dp"
-                    android:text="● 截图: 未授权"
+                    android:paddingBottom="4dp"
+                    android:text="● 截图"
                     android:textColor="@color/app_text_muted"
                     android:textSize="11sp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <!-- 打断按钮（运行中可见） -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_stop_claude"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:minWidth="56dp"
+                    android:text="打断"
+                    android:textSize="12sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:backgroundTint="@color/app_danger"
+                    android:textColor="@color/app_on_primary" />
+
+                <!-- 新建对话按钮 -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_new_session"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="4dp"
+                    android:minWidth="48dp"
+                    android:text="新建"
+                    android:textColor="@color/app_text_secondary"
+                    android:textSize="12sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp" />
 
             </LinearLayout>
 
@@ -238,7 +228,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="#FFF9C4"
+                android:background="@color/app_primary_surface"
                 android:paddingStart="10dp"
                 android:paddingEnd="4dp"
                 android:paddingTop="4dp"
@@ -252,7 +242,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:textSize="12sp"
-                    android:textColor="#5D4037"
+                    android:textColor="@color/app_text_secondary"
                     android:maxLines="1"
                     android:ellipsize="middle" />
 
@@ -264,7 +254,7 @@
                     android:contentDescription="清除附件"
                     android:text="×"
                     android:textSize="16sp"
-                    android:textColor="#795548"
+                    android:textColor="@color/app_text_secondary"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
@@ -289,7 +279,7 @@
                     android:layout_marginEnd="4dp"
                     android:contentDescription="添加附件"
                     android:text=""
-                    android:textColor="#757575"
+                    android:textColor="@color/app_text_muted"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
@@ -308,9 +298,9 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:hint="输入消息..."
-                    android:textColor="#212121"
-                    android:textColorHint="#AAAAAA"
-                    android:background="#EEEEEE"
+                    android:textColor="@color/app_text_primary"
+                    android:textColorHint="@color/app_text_hint"
+                    android:background="@drawable/bg_input_field"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:paddingTop="10dp"
@@ -328,7 +318,7 @@
                     android:layout_marginStart="4dp"
                     android:contentDescription="向终端发送回车"
                     android:text=""
-                    android:textColor="#757575"
+                    android:textColor="@color/app_text_muted"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
@@ -348,7 +338,7 @@
                     android:layout_marginStart="4dp"
                     android:minWidth="64dp"
                     android:text="发送"
-                    android:textColor="@android:color/white"
+                    android:textColor="@color/app_on_primary"
                     android:backgroundTint="@color/app_primary"
                     android:textSize="13sp"
                     android:insetTop="0dp"
@@ -366,7 +356,7 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:orientation="vertical"
-        android:background="#FAFAFA"
+        android:background="@color/app_bg_secondary"
         android:elevation="8dp">
 
         <!-- Tab 栏 -->
@@ -374,7 +364,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="#F0F0F0">
+            android:background="@color/app_bg_tertiary">
 
             <TextView
                 android:id="@+id/tab_history"
@@ -386,7 +376,7 @@
                 android:textSize="13sp"
                 android:textStyle="bold"
                 android:textColor="@color/app_primary"
-                android:background="#FFFFFF" />
+                android:background="@color/app_card_bg" />
 
             <TextView
                 android:id="@+id/tab_memory"
@@ -396,8 +386,8 @@
                 android:text="记忆"
                 android:gravity="center"
                 android:textSize="13sp"
-                android:textColor="#888888"
-                android:background="#F0F0F0" />
+                android:textColor="@color/app_text_muted"
+                android:background="@color/app_bg_tertiary" />
 
             <TextView
                 android:id="@+id/tab_skills"
@@ -407,8 +397,8 @@
                 android:text="技能"
                 android:gravity="center"
                 android:textSize="13sp"
-                android:textColor="#888888"
-                android:background="#F0F0F0" />
+                android:textColor="@color/app_text_muted"
+                android:background="@color/app_bg_tertiary" />
 
             <TextView
                 android:id="@+id/tab_agent_task"
@@ -418,8 +408,8 @@
                 android:text="任务"
                 android:gravity="center"
                 android:textSize="13sp"
-                android:textColor="#888888"
-                android:background="#F0F0F0" />
+                android:textColor="@color/app_text_muted"
+                android:background="@color/app_bg_tertiary" />
 
             <TextView
                 android:id="@+id/tab_uploads"
@@ -429,8 +419,8 @@
                 android:text="上传"
                 android:gravity="center"
                 android:textSize="13sp"
-                android:textColor="#888888"
-                android:background="#F0F0F0" />
+                android:textColor="@color/app_text_muted"
+                android:background="@color/app_bg_tertiary" />
 
         </LinearLayout>
 
@@ -459,7 +449,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="暂无历史记录\n完成一次对话后自动保存"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/app_text_hint"
                     android:textSize="13sp"
                     android:gravity="center"
                     android:padding="24dp"
@@ -490,7 +480,7 @@
                         android:layout_weight="1"
                         android:text="记忆库"
                         android:textSize="13sp"
-                        android:textColor="#555555" />
+                        android:textColor="@color/app_text_secondary" />
 
                     <TextView
                         android:id="@+id/btn_memory_refresh"
@@ -514,7 +504,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="记忆库为空"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/app_text_hint"
                     android:textSize="13sp"
                     android:gravity="center"
                     android:padding="24dp"
@@ -545,7 +535,7 @@
                         android:layout_weight="1"
                         android:text="技能 (Slash Commands)"
                         android:textSize="13sp"
-                        android:textColor="#555555" />
+                        android:textColor="@color/app_text_secondary" />
 
                     <TextView
                         android:id="@+id/btn_skill_add"
@@ -570,7 +560,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="暂无技能\n点击 ＋ 新建"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/app_text_hint"
                     android:textSize="13sp"
                     android:gravity="center"
                     android:padding="24dp"
@@ -600,7 +590,7 @@
                         android:layout_weight="1"
                         android:text="AgentServer 任务"
                         android:textSize="13sp"
-                        android:textColor="#555555" />
+                        android:textColor="@color/app_text_secondary" />
 
                     <TextView
                         android:id="@+id/btn_agent_task_clear"
@@ -608,7 +598,7 @@
                         android:layout_height="wrap_content"
                         android:text="清空"
                         android:textSize="12sp"
-                        android:textColor="#AAAAAA"
+                        android:textColor="@color/app_text_hint"
                         android:padding="8dp" />
 
                 </LinearLayout>
@@ -625,7 +615,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="尚无任务记录\nAgentServer 下发任务后自动显示"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/app_text_hint"
                     android:textSize="13sp"
                     android:gravity="center"
                     android:padding="24dp"
@@ -655,7 +645,7 @@
                         android:layout_weight="1"
                         android:text="上传文件"
                         android:textSize="13sp"
-                        android:textColor="#555555" />
+                        android:textColor="@color/app_text_secondary" />
 
                     <TextView
                         android:id="@+id/btn_uploads_clear_all"
@@ -663,7 +653,7 @@
                         android:layout_height="wrap_content"
                         android:text="清空全部"
                         android:textSize="12sp"
-                        android:textColor="#AAAAAA"
+                        android:textColor="@color/app_text_hint"
                         android:padding="8dp" />
 
                 </LinearLayout>
@@ -680,7 +670,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="暂无上传文件"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/app_text_hint"
                     android:textSize="13sp"
                     android:gravity="center"
                     android:padding="24dp"

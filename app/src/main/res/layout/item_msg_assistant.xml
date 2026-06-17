@@ -20,7 +20,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Claude"
-            android:textColor="#777777"
+            android:textColor="@color/app_text_muted"
             android:textSize="11sp"
             android:paddingStart="4dp"
             android:paddingBottom="2dp" />
@@ -45,7 +45,7 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:text="思考过程 ▶"
-                android:textColor="#888888"
+                android:textColor="@color/app_text_muted"
                 android:textSize="12sp"
                 android:textStyle="italic" />
 
@@ -57,7 +57,7 @@
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
                 android:paddingBottom="8dp"
-                android:textColor="#999999"
+                android:textColor="@color/app_text_hint"
                 android:textSize="12sp"
                 android:textStyle="italic"
                 android:fontFamily="monospace"
@@ -71,7 +71,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bubble_assistant"
-            android:textColor="#212121"
+            android:textColor="@color/app_text_primary"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:paddingTop="10dp"

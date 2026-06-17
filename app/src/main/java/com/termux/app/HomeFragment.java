@@ -163,7 +163,7 @@ public class HomeFragment extends Fragment {
     private ClaudeStreamSession             mClaudeSession;
     private ClaudeStreamSession.Listener    mClaudeListener;
     private ProviderSettingsStore           mProviderStore;
-    private AssistantProvider               mProvider = AssistantProvider.CLAUDE;
+    private AssistantProvider               mProvider = AssistantProvider.CODEX;
     private CodexExecSession                mCodexSession;
     private CodexExecSession.Listener       mCodexListener;
     private volatile int                    mUiGeneration = 0;
@@ -692,14 +692,14 @@ public class HomeFragment extends Fragment {
 
     private void showProviderDialog() {
         if (getContext() == null) return;
-        String[] labels = {"Claude Code", "Codex"};
-        int checked = mProvider == AssistantProvider.CODEX ? 1 : 0;
+        String[] labels = {"Codex", "Claude Code"};
+        int checked = mProvider == AssistantProvider.CLAUDE ? 1 : 0;
         new AlertDialog.Builder(getContext())
             .setTitle("选择提供商")
             .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                 AssistantProvider next = which == 1
-                    ? AssistantProvider.CODEX
-                    : AssistantProvider.CLAUDE;
+                    ? AssistantProvider.CLAUDE
+                    : AssistantProvider.CODEX;
                 dialog.dismiss();
                 requestProviderSwitch(next);
             })
@@ -724,7 +724,7 @@ public class HomeFragment extends Fragment {
     }
 
     private void switchProvider(AssistantProvider next) {
-        if (next == null) next = AssistantProvider.CLAUDE;
+        if (next == null) next = AssistantProvider.CODEX;
         mUiGeneration++;
         cancelAutomationBoost();
         resetAllProviderConversations();
@@ -1251,15 +1251,14 @@ public class HomeFragment extends Fragment {
 
     private void switchDrawerTab(int index) {
         mDrawerFlipper.setDisplayedChild(index);
-        int activeColor   = 0xFF1976D2;
-        int inactiveColor = 0xFF888888;
-        String activeBg   = "#FFFFFF";
-        String inactiveBg = "#F0F0F0";
+        int activeColor   = getResources().getColor(R.color.app_primary, null);
+        int inactiveColor = getResources().getColor(R.color.app_text_muted, null);
+        int activeBg      = getResources().getColor(R.color.app_card_bg, null);
+        int inactiveBg    = getResources().getColor(R.color.app_bg_tertiary, null);
         TextView[] tabs = { mTabHistory, mTabMemory, mTabSkills, mTabAgentTask, mTabUploads };
         for (int i = 0; i < tabs.length; i++) {
             tabs[i].setTextColor(i == index ? activeColor : inactiveColor);
-            tabs[i].setBackgroundColor(android.graphics.Color.parseColor(
-                i == index ? activeBg : inactiveBg));
+            tabs[i].setBackgroundColor(i == index ? activeBg : inactiveBg);
         }
     }
 

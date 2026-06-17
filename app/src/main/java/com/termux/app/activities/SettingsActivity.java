@@ -1,38 +1,44 @@
 package com.termux.app.activities;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
+import android.view.View;
+import android.view.Window;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
-import com.termux.shared.activities.ReportActivity;
-import com.termux.shared.file.FileUtils;
-import com.termux.shared.models.ReportInfo;
-import com.termux.app.models.UserAction;
-import com.termux.shared.interact.ShareUtils;
-import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxFloatAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxTaskerAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences;
-import com.termux.shared.android.AndroidUtils;
-import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
-import com.termux.shared.theme.NightMode;
 
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends AppCompatActivity
+    implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+
+    private CharSequence mRootTitle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
+        getDelegate().setLocalNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        mRootTitle = getTitle();
+        registerPreferenceStyler();
 
         setContentView(R.layout.activity_settings);
         if (savedInstanceState == null) {
@@ -44,12 +50,136 @@ public class SettingsActivity extends AppCompatActivity {
 
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+        applySettingsChrome();
+        setSettingsTitle(mRootTitle);
+
+        getSupportFragmentManager().addOnBackStackChangedListener(() -> {
+            int count = getSupportFragmentManager().getBackStackEntryCount();
+            CharSequence title = mRootTitle;
+            if (count > 0) {
+                title = getSupportFragmentManager().getBackStackEntryAt(count - 1).getName();
+            }
+            setSettingsTitle(title);
+        });
     }
 
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
+            getSupportFragmentManager().popBackStack();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public boolean onPreferenceStartFragment(@NonNull PreferenceFragmentCompat caller,
+                                             @NonNull Preference preference) {
+        String fragmentName = preference.getFragment();
+        if (fragmentName == null || fragmentName.isEmpty()) return false;
+
+        Fragment fragment = getSupportFragmentManager()
+            .getFragmentFactory()
+            .instantiate(getClassLoader(), fragmentName);
+        fragment.setArguments(preference.getExtras());
+
+        CharSequence title = preference.getTitle() == null ? mRootTitle : preference.getTitle();
+        getSupportFragmentManager()
+            .beginTransaction()
+            .replace(R.id.settings, fragment)
+            .addToBackStack(title == null ? "" : title.toString())
+            .commit();
+        setSettingsTitle(title);
+        return true;
+    }
+
+    private void setSettingsTitle(CharSequence title) {
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setTitle(title);
+        }
+
+        Toolbar toolbar = findViewById(com.termux.shared.R.id.toolbar);
+        if (toolbar != null) {
+            toolbar.setTitle(title);
+        }
+    }
+
+    private void applySettingsChrome() {
+        Window window = getWindow();
+        int backgroundColor = ContextCompat.getColor(this, R.color.app_bg_secondary);
+        int surfaceColor = ContextCompat.getColor(this, R.color.app_card_bg);
+        int primaryColor = ContextCompat.getColor(this, R.color.app_primary);
+        int textColor = ContextCompat.getColor(this, R.color.app_text_primary);
+
+        window.setStatusBarColor(backgroundColor);
+        window.setNavigationBarColor(surfaceColor);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            window.getDecorView().setSystemUiVisibility(flags);
+        }
+
+        Toolbar toolbar = findViewById(com.termux.shared.R.id.toolbar);
+        if (toolbar != null) {
+            toolbar.setBackgroundColor(surfaceColor);
+            toolbar.setTitleTextColor(textColor);
+            toolbar.setSubtitleTextColor(ContextCompat.getColor(this, R.color.app_text_secondary));
+            Drawable navigationIcon = toolbar.getNavigationIcon();
+            if (navigationIcon != null) {
+                Drawable wrappedIcon = DrawableCompat.wrap(navigationIcon).mutate();
+                DrawableCompat.setTint(wrappedIcon, primaryColor);
+                toolbar.setNavigationIcon(wrappedIcon);
+            }
+        }
+    }
+
+    private void registerPreferenceStyler() {
+        getSupportFragmentManager().registerFragmentLifecycleCallbacks(
+            new FragmentManager.FragmentLifecycleCallbacks() {
+                @Override
+                public void onFragmentViewCreated(@NonNull FragmentManager fm,
+                                                  @NonNull Fragment fragment,
+                                                  @NonNull View view,
+                                                  Bundle savedInstanceState) {
+                    if (fragment instanceof PreferenceFragmentCompat) {
+                        stylePreferenceFragment((PreferenceFragmentCompat) fragment, view);
+                    }
+                }
+            },
+            true
+        );
+    }
+
+    private static void stylePreferenceFragment(@NonNull PreferenceFragmentCompat fragment,
+                                                @NonNull View view) {
+        Context context = view.getContext();
+        int backgroundColor = ContextCompat.getColor(context, R.color.app_bg_secondary);
+        view.setBackgroundColor(backgroundColor);
+
+        RecyclerView list = fragment.getListView();
+        if (list != null) {
+            list.setBackgroundColor(backgroundColor);
+            list.setClipToPadding(false);
+            list.setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 18));
+            list.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            if (adapter != null) {
+                adapter.notifyDataSetChanged();
+            }
+        }
+    }
+
+    private static int dp(@NonNull Context context, int value) {
+        return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
@@ -59,8 +189,6 @@ public class SettingsActivity extends AppCompatActivity {
             if (context == null) return;
 
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
-            configureAutomationBoostPreference();
-
             new Thread() {
                 @Override
                 public void run() {
@@ -68,24 +196,8 @@ public class SettingsActivity extends AppCompatActivity {
                     configureTermuxFloatPreference(context);
                     configureTermuxTaskerPreference(context);
                     configureTermuxWidgetPreference(context);
-                    configureAboutPreference(context);
-                    configureDonatePreference(context);
                 }
             }.start();
-        }
-
-        private void configureAutomationBoostPreference() {
-            Preference automationPreference = findPreference("automation_boost");
-            if (automationPreference != null) {
-                automationPreference.setOnPreferenceClickListener(preference -> {
-                    getParentFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.settings, new com.termux.app.AutomationSettingsFragment())
-                        .addToBackStack("automation_boost")
-                        .commit();
-                    return true;
-                });
-            }
         }
 
         private void configureTermuxAPIPreference(@NonNull Context context) {
@@ -121,62 +233,6 @@ public class SettingsActivity extends AppCompatActivity {
                 TermuxWidgetAppSharedPreferences preferences = TermuxWidgetAppSharedPreferences.build(context, false);
                 // If failed to get app preferences, then likely app is not installed, so do not show its preference
                 termuxWidgetPreference.setVisible(preferences != null);
-            }
-        }
-
-        private void configureAboutPreference(@NonNull Context context) {
-            Preference aboutPreference = findPreference("about");
-            if (aboutPreference != null) {
-                aboutPreference.setOnPreferenceClickListener(preference -> {
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            String title = "About";
-
-                            StringBuilder aboutString = new StringBuilder();
-                            aboutString.append(TermuxUtils.getAppInfoMarkdownString(context, TermuxUtils.AppInfoMode.TERMUX_AND_PLUGIN_PACKAGES));
-                            aboutString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(context, true));
-                            aboutString.append("\n\n").append(TermuxUtils.getImportantLinksMarkdownString(context));
-
-                            String userActionName = UserAction.ABOUT.getName();
-
-                            ReportInfo reportInfo = new ReportInfo(userActionName,
-                                TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME, title);
-                            reportInfo.setReportString(aboutString.toString());
-                            reportInfo.setReportSaveFileLabelAndPath(userActionName,
-                                Environment.getExternalStorageDirectory() + "/" +
-                                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true));
-
-                            ReportActivity.startReportActivity(context, reportInfo);
-                        }
-                    }.start();
-
-                    return true;
-                });
-            }
-        }
-
-        private void configureDonatePreference(@NonNull Context context) {
-            Preference donatePreference = findPreference("donate");
-            if (donatePreference != null) {
-                String signingCertificateSHA256Digest = PackageUtils.getSigningCertificateSHA256DigestForPackage(context);
-                if (signingCertificateSHA256Digest != null) {
-                    // If APK is a Google Playstore release, then do not show the donation link
-                    // since Termux isn't exempted from the playstore policy donation links restriction
-                    // Check Fund solicitations: https://pay.google.com/intl/en_in/about/policy/
-                    String apkRelease = TermuxUtils.getAPKRelease(signingCertificateSHA256Digest);
-                    if (apkRelease == null || apkRelease.equals(TermuxConstants.APK_RELEASE_GOOGLE_PLAYSTORE_SIGNING_CERTIFICATE_SHA256_DIGEST)) {
-                        donatePreference.setVisible(false);
-                        return;
-                    } else {
-                        donatePreference.setVisible(true);
-                    }
-                }
-
-                donatePreference.setOnPreferenceClickListener(preference -> {
-                    ShareUtils.openUrl(context, TermuxConstants.TERMUX_DONATE_URL);
-                    return true;
-                });
             }
         }
     }

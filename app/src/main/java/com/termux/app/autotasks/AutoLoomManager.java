@@ -124,10 +124,16 @@ public class AutoLoomManager {
                 "  install_bin \"$_t/loom/bin/slave-agent\" /usr/local/bin/slave-agent || true\n" +
                 "  install_bin \"$_t/loom/bin/mcp-userspace\" /usr/local/bin/mcp-userspace || true\n" +
                 "  id claude >/dev/null 2>&1 || useradd -m -s /bin/bash claude\n" +
+                "  id codex >/dev/null 2>&1 || useradd -m -s /bin/bash codex\n" +
                 "  mkdir -p /home/claude/.loom/observer-local /home/claude/.loom/slave-local /home/claude/.loom/driver-local /home/claude/loom-driver\n" +
+                "  mkdir -p /home/codex/.loom/observer-local /home/codex/.loom/slave-local /home/codex/.loom/driver-local /home/codex/loom-driver /home/codex/.codex/skills/loom-driver\n" +
                 "  [ -f /usr/local/bin/driver-agent ] && cp /usr/local/bin/driver-agent /home/claude/loom-driver/driver-agent && chmod +x /home/claude/loom-driver/driver-agent\n" +
+                "  [ -f /usr/local/bin/driver-agent ] && cp /usr/local/bin/driver-agent /home/codex/loom-driver/driver-agent && chmod +x /home/codex/loom-driver/driver-agent\n" +
                 "  [ -d \"$_t/loom/skills\" ] && mkdir -p /home/claude/loom-driver/.claude/skills && cp -a \"$_t/loom/skills\"/. /home/claude/loom-driver/.claude/skills/ 2>/dev/null || true\n" +
+                "  [ -d \"$_t/loom/skills\" ] && cp -a \"$_t/loom/skills\"/. /home/codex/.codex/skills/loom-driver/ 2>/dev/null || true\n" +
+                "  _agents=$(find \"$_t/loom/prompts-codex\" -type f -name AGENTS.md 2>/dev/null | head -1); [ -n \"$_agents\" ] && cp \"$_agents\" /home/codex/loom-driver/AGENTS.md || true\n" +
                 "  chown -R claude:claude /home/claude/.loom /home/claude/loom-driver 2>/dev/null || true\n" +
+                "  chown -R codex:codex /home/codex/.loom /home/codex/loom-driver /home/codex/.codex 2>/dev/null || true\n" +
                 "  rm -rf \"$_t\"\n" +
                 "INNER\n";
 
@@ -170,7 +176,8 @@ public class AutoLoomManager {
         }
         s.append("_tgz='/tmp/loom-linux-arm64.tgz'\n");
         s.append("_base='https://github.com/agentserver/loom/releases/latest/download'\n");
-        s.append("_skills_dst='/home/claude/loom-driver/.claude/skills'\n\n");
+        s.append("_claude_skills_dst='/home/claude/loom-driver/.claude/skills'\n");
+        s.append("_codex_skills_dst='/home/codex/.codex/skills/loom-driver'\n\n");
 
         s.append("cleanup_hook() {\n");
         s.append("    sed -i '/.loom-setup/d' ~/.bashrc 2>/dev/null\n");
@@ -263,8 +270,9 @@ public class AutoLoomManager {
         s.append("copy_skills_dir() {\n");
         s.append("    _src=\"$1\"\n");
         s.append("    [ -d \"$_src\" ] || return 0\n");
-        s.append("    mkdir -p \"$_skills_dst\"\n");
-        s.append("    cp -a \"$_src\"/. \"$_skills_dst\"/\n");
+        s.append("    mkdir -p \"$_claude_skills_dst\" \"$_codex_skills_dst\"\n");
+        s.append("    cp -a \"$_src\"/. \"$_claude_skills_dst\"/\n");
+        s.append("    cp -a \"$_src\"/. \"$_codex_skills_dst\"/\n");
         s.append("}\n\n");
 
         s.append("extract_skills_tgz() {\n");
@@ -272,11 +280,13 @@ public class AutoLoomManager {
         s.append("    [ -s \"$_archive\" ] || return 0\n");
         s.append("    _stmp=$(mktemp -d)\n");
         s.append("    if tar -xzf \"$_archive\" -C \"$_stmp\" 2>/dev/null; then\n");
-        s.append("        mkdir -p \"$_skills_dst\"\n");
+        s.append("        mkdir -p \"$_claude_skills_dst\" \"$_codex_skills_dst\"\n");
         s.append("        if [ -d \"$_stmp/skills\" ]; then\n");
-        s.append("            cp -a \"$_stmp/skills\"/. \"$_skills_dst\"/\n");
+        s.append("            cp -a \"$_stmp/skills\"/. \"$_claude_skills_dst\"/\n");
+        s.append("            cp -a \"$_stmp/skills\"/. \"$_codex_skills_dst\"/\n");
         s.append("        else\n");
-        s.append("            cp -a \"$_stmp\"/. \"$_skills_dst\"/\n");
+        s.append("            cp -a \"$_stmp\"/. \"$_claude_skills_dst\"/\n");
+        s.append("            cp -a \"$_stmp\"/. \"$_codex_skills_dst\"/\n");
         s.append("        fi\n");
         s.append("    fi\n");
         s.append("    rm -rf \"$_stmp\"\n");
@@ -287,6 +297,7 @@ public class AutoLoomManager {
         s.append("    [ -d \"$_src\" ] || return 0\n");
         s.append("    _agents=$(find \"$_src\" -type f -name AGENTS.md | head -1)\n");
         s.append("    [ -n \"$_agents\" ] && cp \"$_agents\" /home/claude/loom-driver/AGENTS.md || true\n");
+        s.append("    [ -n \"$_agents\" ] && cp \"$_agents\" /home/codex/loom-driver/AGENTS.md || true\n");
         s.append("}\n\n");
 
         s.append("extract_prompts_tgz() {\n");
@@ -301,7 +312,9 @@ public class AutoLoomManager {
 
         s.append("mkdir -p /usr/local/bin\n");
         s.append("id claude >/dev/null 2>&1 || useradd -m -s /bin/bash claude\n");
-        s.append("mkdir -p /home/claude/.loom/observer-local /home/claude/.loom/slave-local /home/claude/.loom/driver-local /home/claude/loom-driver \"$_skills_dst\"\n\n");
+        s.append("id codex >/dev/null 2>&1 || useradd -m -s /bin/bash codex\n");
+        s.append("mkdir -p /home/claude/.loom/observer-local /home/claude/.loom/slave-local /home/claude/.loom/driver-local /home/claude/loom-driver \"$_claude_skills_dst\"\n");
+        s.append("mkdir -p /home/codex/.loom/observer-local /home/codex/.loom/slave-local /home/codex/.loom/driver-local /home/codex/loom-driver \"$_codex_skills_dst\"\n\n");
 
         s.append("_tmpdir=''\n");
         s.append("_local_ok=0\n");
@@ -318,10 +331,12 @@ public class AutoLoomManager {
         s.append("install_bin \"$_tmpdir/loom/bin/driver-agent\" /usr/local/bin/driver-agent && ");
         s.append("install_bin \"$_tmpdir/loom/bin/slave-agent\" /usr/local/bin/slave-agent; then\n");
         s.append("            install_bin \"$_tmpdir/loom/bin/mcp-userspace\" /usr/local/bin/mcp-userspace || echo '[*] Optional mcp-userspace not present; skipped.'\n");
-        s.append("            cp /usr/local/bin/driver-agent /home/claude/loom-driver/driver-agent\n");
-        s.append("            chmod +x /home/claude/loom-driver/driver-agent\n");
-        s.append("            copy_skills_dir \"$_tmpdir/loom/skills\"\n");
-        s.append("            copy_prompts_dir \"$_tmpdir/loom/prompts-codex\"\n");
+            s.append("            cp /usr/local/bin/driver-agent /home/claude/loom-driver/driver-agent\n");
+            s.append("            chmod +x /home/claude/loom-driver/driver-agent\n");
+            s.append("            cp /usr/local/bin/driver-agent /home/codex/loom-driver/driver-agent\n");
+            s.append("            chmod +x /home/codex/loom-driver/driver-agent\n");
+            s.append("            copy_skills_dir \"$_tmpdir/loom/skills\"\n");
+            s.append("            copy_prompts_dir \"$_tmpdir/loom/prompts-codex\"\n");
         s.append("            _local_ok=1\n");
         s.append("        else\n");
         s.append("            echo '[!] Local Loom archive is missing required binaries; falling back to online assets.'\n");
@@ -343,11 +358,14 @@ public class AutoLoomManager {
         s.append("    [ -f /tmp/mcp-userspace.linux-arm64 ] && verify_asset mcp-userspace.linux-arm64 /tmp/mcp-userspace.linux-arm64 && install_bin /tmp/mcp-userspace.linux-arm64 /usr/local/bin/mcp-userspace || true\n");
         s.append("    cp /usr/local/bin/driver-agent /home/claude/loom-driver/driver-agent\n");
         s.append("    chmod +x /home/claude/loom-driver/driver-agent\n");
+        s.append("    cp /usr/local/bin/driver-agent /home/codex/loom-driver/driver-agent\n");
+        s.append("    chmod +x /home/codex/loom-driver/driver-agent\n");
         s.append("    extract_skills_tgz /tmp/driver-skills.tar.gz\n");
         s.append("    extract_prompts_tgz /tmp/driver-codex-prompts.tar.gz\n");
         s.append("fi\n\n");
 
         s.append("chown -R claude:claude /home/claude/.loom /home/claude/loom-driver\n");
+        s.append("chown -R codex:codex /home/codex/.loom /home/codex/loom-driver /home/codex/.codex\n");
         s.append("[ -n \"$_tmpdir\" ] && rm -rf \"$_tmpdir\"\n");
         s.append("rm -f \"$_tgz\" /tmp/observer-server.linux-arm64 /tmp/driver-agent.linux-arm64 /tmp/slave-agent.linux-arm64 /tmp/mcp-userspace.linux-arm64 /tmp/driver-skills.tar.gz /tmp/driver-codex-prompts.tar.gz /tmp/sha256sums.txt\n");
         s.append("cleanup_hook\n");

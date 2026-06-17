@@ -1,156 +1,301 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/app_surface"
-    android:fillViewport="true">
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_section_header"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/automation_back_button"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="返回设置"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="40dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:text=""
+            app:icon="@drawable/ic_arrow_back_24"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconTint="@color/app_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="自动化 Boost"
+            android:textColor="@color/app_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/app_bg_secondary"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/automation_boost_enabled"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/automation_boost_global_enabled"
-            android:textColor="@color/app_text_primary"
-            android:textSize="15sp"
-            app:thumbTint="@color/automation_switch_thumb"
-            app:trackTint="@color/automation_switch_track"
-            app:useMaterialThemeColors="false" />
+        android:paddingStart="12dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="18dp">
 
         <TextView
-            android:id="@+id/automation_runtime_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            android:text="管理快速路径、候选动作和失败回退"
+            android:textColor="@color/app_text_muted"
+            android:textSize="13sp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            app:cardBackgroundColor="@color/app_card_bg"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="1dp"
+            app:strokeColor="@color/app_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/automation_boost_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/automation_boost_global_enabled"
+                    android:textColor="@color/app_text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    app:thumbTint="@color/automation_switch_thumb"
+                    app:trackTint="@color/automation_switch_track"
+                    app:useMaterialThemeColors="false" />
+
+                <TextView
+                    android:id="@+id/automation_runtime_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_settings_summary"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp"
+                    android:textColor="@color/app_primary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/automation_whitelist_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="低风险、可复现的动作会被收集为候选；失败时会回退到 Agent，并清除本次 Boost 标记。"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_section_header"
+            android:paddingStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
+            android:text="@string/automation_boost_candidates"
+            android:textColor="@color/app_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="@drawable/bg_settings_summary"
-            android:paddingStart="12dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp"
-            android:textColor="@color/app_primary"
-            android:textSize="12sp" />
+            android:layout_marginBottom="14dp"
+            app:cardBackgroundColor="@color/app_card_bg"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="1dp"
+            app:strokeColor="@color/app_border"
+            app:strokeWidth="1dp">
 
-        <TextView
-            android:id="@+id/automation_whitelist_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="低风险、可复现的动作会被收集为候选；失败时会回退到 Agent，并清除本次 Boost 标记。"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="等待确认的学习结果；启用后才会进入快速路径。"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="@string/automation_boost_candidates"
-            android:textColor="@color/app_text_primary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/automation_candidates_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/automation_boost_empty_candidates"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:text="等待你确认的学习结果；启用后才会进入快速路径。"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/automation_candidates_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:text="@string/automation_boost_empty_candidates"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/automation_candidates_recycler"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/automation_candidates_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_section_header"
+            android:paddingStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
             android:text="@string/automation_boost_recipes"
-            android:textColor="@color/app_text_primary"
-            android:textSize="14sp"
+            android:textColor="@color/app_primary"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
-        <TextView
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:text="已允许自动执行的动作；应用和配方白名单会共同限制生效范围。"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="14dp"
+            app:cardBackgroundColor="@color/app_card_bg"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="1dp"
+            app:strokeColor="@color/app_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="已允许自动执行的动作；应用和配方白名单会共同限制生效范围。"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/automation_recipes_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/automation_boost_empty_recipes"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/automation_recipes_recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
-            android:id="@+id/automation_recipes_empty"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:text="@string/automation_boost_empty_recipes"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/automation_recipes_recycler"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_section_header"
+            android:paddingStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
             android:text="@string/automation_boost_failures"
-            android:textColor="@color/app_text_primary"
-            android:textSize="14sp"
+            android:textColor="@color/app_primary"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
-        <TextView
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:text="这里显示最近回退原因，用来判断哪些路径还不适合自动化。"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="@color/app_card_bg"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="1dp"
+            app:strokeColor="@color/app_border"
+            app:strokeWidth="1dp">
 
-        <TextView
-            android:id="@+id/automation_failures_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:text="@string/automation_boost_empty_failures"
-            android:textColor="@color/app_text_muted"
-            android:textSize="12sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
 
-        <LinearLayout
-            android:id="@+id/automation_failures_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="这里显示最近回退原因，用来判断哪些路径还不适合自动化。"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
 
+                <TextView
+                    android:id="@+id/automation_failures_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/automation_boost_empty_failures"
+                    android:textColor="@color/app_text_muted"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:id="@+id/automation_failures_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
-
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

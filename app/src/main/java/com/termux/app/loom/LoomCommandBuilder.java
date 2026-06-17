@@ -5,11 +5,8 @@ import com.termux.app.ProviderProfile;
 
 public final class LoomCommandBuilder {
 
-    public static final String PROOT_USER = "claude";
-    public static final String OBSERVER_HOME = "/home/claude/.loom/observer-local";
-    public static final String DRIVER_HOME = "/home/claude/.loom/driver-local";
-    public static final String DRIVER_PROJECT = "/home/claude/loom-driver";
-    public static final String SLAVE_HOME = "/home/claude/.loom/slave-local";
+    public static final String DRIVER_CONFIG_BEGIN_MARKER = "__LOOM_DRIVER_CONFIG_PUBLIC_IDENTITY_BEGIN__";
+    public static final String DRIVER_CONFIG_END_MARKER = "__LOOM_DRIVER_CONFIG_PUBLIC_IDENTITY_END__";
 
     private LoomCommandBuilder() {
     }
@@ -24,7 +21,7 @@ public final class LoomCommandBuilder {
         String slaveProcess = slaveProcess(p);
         String observerLog = logPath(prefix, "loom-observer.log");
         String slaveLog = logPath(prefix, "loom-slave.log");
-        String driverRegisterLog = logPath(prefix, "loom-driver-register.log");
+        String driverBindLog = logPath(prefix, "loom-driver-bind.log");
         String ubuntuStatus = ""
             + "set +e\n"
             + loomPidsFunction()
@@ -47,7 +44,7 @@ public final class LoomCommandBuilder {
             + proot(ubuntuStatus, p.user) + "\n"
             + tailLog("observer log", observerLog)
             + tailLog("slave log", slaveLog)
-            + tailLog("driver register log", driverRegisterLog);
+            + tailLog("driver bind log", driverBindLog);
     }
 
     public static String startObserverScript(String prefix) {
@@ -82,40 +79,101 @@ public final class LoomCommandBuilder {
     }
 
     public static String registerDriverScript() {
-        return registerDriverScript(LoomSettings.defaults());
+        return bindDriverScript(LoomSettings.defaults());
     }
 
     public static String registerDriverScript(LoomSettings settings) {
+        return bindDriverScript(settings);
+    }
+
+    public static String bindDriverScript() {
+        return bindDriverScript(LoomSettings.defaults());
+    }
+
+    public static String bindDriverScript(LoomSettings settings) {
         Paths p = paths(settings);
         String command = ""
             + "cd " + p.driverProject + "\n"
             + p.driverProject + "/driver-agent register --config " + p.driverConfig;
 
         return header()
+            + "echo '[*] 绑定 Driver 到当前 Agent'\n"
             + "set -o pipefail\n"
             + "command -v proot-distro\n"
-            + proot(command, p.user) + " 2>&1 | tee -a \"$HOME/loom-driver-register.log\"\n";
+            + proot(command, p.user) + " 2>&1 | tee -a \"$HOME/loom-driver-bind.log\"\n";
+    }
+
+    public static String bindDriverIfNeededScript(LoomSettings settings) {
+        LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
+        Paths p = paths(safeSettings);
+        String command = ""
+            + driverConfigIdentityFunctions()
+            + "_driver_cfg=" + shellQuote(p.driverConfig) + "\n"
+            + "if [ -s \"$_driver_cfg\" ] && driver_has_identity \"$_driver_cfg\""
+                + " && driver_server_matches \"$_driver_cfg\" " + shellQuote(safeSettings.agentServerUrl) + "; then\n"
+            + "  echo '[*] Driver already registered; reusing existing config'\n"
+            + "else\n"
+            + "  cd " + p.driverProject + "\n"
+            + "  " + p.driverProject + "/driver-agent register --config " + p.driverConfig + "\n"
+            + "fi";
+
+        return header()
+            + "echo '[*] 绑定 Driver 到当前 Agent'\n"
+            + "set -o pipefail\n"
+            + "command -v proot-distro\n"
+            + proot(command, p.user) + " 2>&1 | tee -a \"$HOME/loom-driver-bind.log\"\n";
     }
 
     public static String setupConfigScript(LoomSettings settings) {
+        return setupConfigScript(settings, false);
+    }
+
+    public static String setupConfigScript(LoomSettings settings, boolean resetDriverConfig) {
         LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
         Paths p = paths(safeSettings);
         String observer = b64(LoomConfigRenderer.renderObserverConfig(safeSettings, p.observerHome));
         String driver = b64(LoomConfigRenderer.renderDriverConfig(safeSettings, p.driverProject, p.driverHome));
         String slave = b64(LoomConfigRenderer.renderSlaveConfig(safeSettings, p.slaveHome, 1, "aarch64", 1));
         String mcpJson = b64(driverMcpJson(p));
+        String codexMcpToml = codexMcpToml(p);
         String command = ""
             + "mkdir -p " + p.observerHome + " " + p.driverHome + " " + p.slaveHome + " "
-                + p.driverProject + "/logs " + p.driverProject + "/.claude/skills\n"
+                + p.driverProject + "/logs " + p.loomSkillsDir + " " + p.loomMcpParent + "\n"
             + "printf '%s' '" + observer + "' | base64 -d > " + p.observerConfig + "\n"
-            + "printf '%s' '" + driver + "' | base64 -d > " + p.driverConfig + "\n"
+            + driverConfigWriteCommand(p, driver, resetDriverConfig, safeSettings.agentServerUrl)
             + "printf '%s' '" + slave + "' | base64 -d > " + p.slaveConfig + "\n"
-            + "printf '%s' '" + mcpJson + "' | base64 -d > " + p.driverProject + "/.mcp.json\n"
+            + "if [ " + shellQuote(p.provider.id) + " = 'claude' ]; then\n"
+            + "  printf '%s' '" + mcpJson + "' | base64 -d > " + p.loomMcpConfig + "\n"
+            + "fi\n"
+            + "if [ " + shellQuote(p.provider.id) + " = 'codex' ]; then\n"
+            + "  _codex_cfg=" + shellQuote(p.loomMcpConfig) + "\n"
+            + "  touch \"$_codex_cfg\"\n"
+            + "  awk 'BEGIN{skip=0} /^\\[mcp_servers\\.loom-driver\\]/{skip=1; next} /^\\[/{skip=0} !skip{print}' \"$_codex_cfg\" > \"$_codex_cfg.tmp\" 2>/dev/null || cp \"$_codex_cfg\" \"$_codex_cfg.tmp\"\n"
+            + "  mv \"$_codex_cfg.tmp\" \"$_codex_cfg\"\n"
+            + "  cat >> \"$_codex_cfg\" <<'LOOM_CODEX_MCP'\n"
+            + codexMcpToml
+            + "LOOM_CODEX_MCP\n"
+            + "fi\n"
             + "cp /usr/local/bin/driver-agent " + p.driverProject + "/driver-agent\n"
             + "chmod +x " + p.driverProject + "/driver-agent\n"
             + "chmod 600 " + p.observerConfig + " " + p.driverConfig + " " + p.slaveConfig + "\n"
             + "echo '[*] Loom configs written'\n"
             + "echo '[*] Driver project is ready at " + p.driverProject + "'";
+
+        return header()
+            + "command -v proot-distro\n"
+            + proot(command, p.user) + "\n";
+    }
+
+    public static String readDriverConfigScript(LoomSettings settings) {
+        LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
+        Paths p = paths(safeSettings);
+        String command = ""
+            + "_driver_cfg=" + shellQuote(p.driverConfig) + "\n"
+            + "test -f \"$_driver_cfg\"\n"
+            + "echo " + shellQuote(DRIVER_CONFIG_BEGIN_MARKER) + "\n"
+            + "grep -E '^(server:|credentials:|[[:space:]]+(url|name|sandbox_id|workspace_id|short_id):)' \"$_driver_cfg\" || true\n"
+            + "echo " + shellQuote(DRIVER_CONFIG_END_MARKER) + "\n";
 
         return header()
             + "command -v proot-distro\n"
@@ -132,7 +190,7 @@ public final class LoomCommandBuilder {
             + startSlaveScript(prefix, safeSettings)
             + "\n"
             + "echo '[*] Driver project is ready at " + p.driverProject + "'\n"
-            + "echo '[*] Run driver registration from Loom page if config.yaml has empty credentials.'\n";
+            + "echo '[*] Run driver binding from Loom page if config.yaml has empty credentials.'\n";
     }
 
     public static String startSlaveScript(String prefix) {
@@ -228,6 +286,46 @@ public final class LoomCommandBuilder {
             + "}\n";
     }
 
+    private static String codexMcpToml(Paths p) {
+        return "\n[mcp_servers.loom-driver]\n"
+            + "command = \"" + p.driverProject + "/driver-agent\"\n"
+            + "args = [\"serve-mcp\", \"--config\", \"" + p.driverConfig + "\"]\n";
+    }
+
+    private static String driverConfigWriteCommand(
+            Paths p,
+            String driverConfigB64,
+            boolean resetDriverConfig,
+            String agentServerUrl) {
+        if (resetDriverConfig) {
+            return "printf '%s' '" + driverConfigB64 + "' | base64 -d > " + p.driverConfig + "\n";
+        }
+        return ""
+            + driverConfigIdentityFunctions()
+            + "_driver_cfg=" + shellQuote(p.driverConfig) + "\n"
+            + "_driver_tmp=" + shellQuote(p.driverConfig + ".tmp.android") + "\n"
+            + "printf '%s' '" + driverConfigB64 + "' | base64 -d > \"$_driver_tmp\"\n"
+            + "if [ -s \"$_driver_cfg\" ] && driver_has_identity \"$_driver_cfg\""
+                + " && driver_server_matches \"$_driver_cfg\" " + shellQuote(agentServerUrl) + "; then\n"
+            + "  echo '[*] Keeping registered Driver config'\n"
+            + "  rm -f \"$_driver_tmp\"\n"
+            + "else\n"
+            + "  mv \"$_driver_tmp\" \"$_driver_cfg\"\n"
+            + "fi\n";
+    }
+
+    private static String driverConfigIdentityFunctions() {
+        return ""
+            + "driver_has_identity() {\n"
+            + "  grep -Eq '^[[:space:]]+(sandbox_id|workspace_id|short_id):[[:space:]]*\"?[^\"#[:space:]]+' \"$1\" 2>/dev/null\n"
+            + "}\n"
+            + "driver_server_matches() {\n"
+            + "  _expected=\"$2\"\n"
+            + "  [ -z \"$_expected\" ] && return 0\n"
+            + "  grep -F \"  url: \\\"$_expected\\\"\" \"$1\" >/dev/null 2>&1 || grep -F \"  url: $_expected\" \"$1\" >/dev/null 2>&1\n"
+            + "}\n";
+    }
+
     private static String b64(String value) {
         return java.util.Base64.getEncoder().encodeToString(
             value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -238,7 +336,7 @@ public final class LoomCommandBuilder {
     }
 
     private static Paths paths(LoomSettings settings) {
-        AssistantProvider provider = settings == null ? AssistantProvider.CLAUDE : settings.agentProvider;
+        AssistantProvider provider = settings == null ? AssistantProvider.CODEX : settings.agentProvider;
         return new Paths(provider);
     }
 
@@ -256,6 +354,8 @@ public final class LoomCommandBuilder {
 
     private static final class Paths {
         final String user;
+        final AssistantProvider provider;
+        final String home;
         final String observerHome;
         final String driverHome;
         final String driverProject;
@@ -263,17 +363,26 @@ public final class LoomCommandBuilder {
         final String observerConfig;
         final String driverConfig;
         final String slaveConfig;
+        final String loomMcpConfig;
+        final String loomMcpParent;
+        final String loomSkillsDir;
 
         Paths(AssistantProvider provider) {
             ProviderProfile profile = ProviderProfile.forProvider(provider);
+            this.provider = profile.provider;
             user = profile.user;
+            home = profile.home;
             observerHome = profile.home + "/.loom/observer-local";
-            driverHome = profile.home + "/.loom/driver-local";
-            driverProject = profile.home + "/loom-driver";
+            driverHome = profile.driverTokenDir;
+            driverProject = profile.driverProjectDir;
             slaveHome = profile.home + "/.loom/slave-local";
             observerConfig = observerHome + "/observer.yaml";
-            driverConfig = driverProject + "/config.yaml";
+            driverConfig = profile.driverConfigPath;
             slaveConfig = slaveHome + "/config.yaml";
+            loomMcpConfig = profile.loomMcpConfigPath;
+            int slash = loomMcpConfig.lastIndexOf('/');
+            loomMcpParent = slash > 0 ? loomMcpConfig.substring(0, slash) : profile.home;
+            loomSkillsDir = profile.loomSkillsDir;
         }
     }
 }

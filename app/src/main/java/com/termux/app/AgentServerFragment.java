@@ -43,12 +43,17 @@ public class AgentServerFragment extends Fragment {
     private static final String KEY_SANDBOX_CODE  = "sandbox_code";
     private static final String KEY_DEVICE_NAME   = "device_name";
     private static final String KEY_SANDBOX_ID    = "sandbox_id";  // 上次成功连接的沙盒 ID
+    private static final String KEY_WORKSPACE_ID  = "workspace_id";
+    private static final String KEY_CODEX_CONNECT_COMMAND = "codex_connect_command";
 
     private TextView  mStatusText;
     private TextView  mInfoText;
     private TextView  mProviderText;
+    private TextView  mCodeLabel;
+    private TextView  mCodexCommandLabel;
     private EditText  mUrlEdit;
     private EditText  mCodeEdit;
+    private EditText  mCodexCommandEdit;
     private EditText  mDeviceNameEdit;
     private TextView  mLogText;
     private TextView  mLogLabel;
@@ -59,7 +64,7 @@ public class AgentServerFragment extends Fragment {
     private String mLastSandboxId = "";  // 上次成功连接的沙盒 ID，用于 --resume
     private boolean mConnected = false;       // 本次 connect 是否成功建立 tunnel
     private boolean mRetryWithoutResume = false; // 401 后重试（不带 --resume）
-    private AssistantProvider mProvider = AssistantProvider.CLAUDE;
+    private AssistantProvider mProvider = AssistantProvider.CODEX;
 
     // OAuth Device Flow 授权弹窗：每次 doConnect 重置；同一次连接只弹一次
     private AlertDialog mAuthDialog;
@@ -85,13 +90,21 @@ public class AgentServerFragment extends Fragment {
         mStatusText    = v.findViewById(R.id.agentserver_status_text);
         mInfoText      = v.findViewById(R.id.agentserver_info);
         mProviderText  = v.findViewById(R.id.agentserver_provider_text);
+        mCodeLabel     = v.findViewById(R.id.agentserver_code_label);
+        mCodexCommandLabel = v.findViewById(R.id.agentserver_codex_command_label);
         mUrlEdit       = v.findViewById(R.id.agentserver_url);
         mCodeEdit      = v.findViewById(R.id.agentserver_code);
+        mCodexCommandEdit = v.findViewById(R.id.agentserver_codex_command);
         mDeviceNameEdit = v.findViewById(R.id.agentserver_device_name);
         mLogText       = v.findViewById(R.id.agentserver_log);
         mLogLabel      = v.findViewById(R.id.agentserver_log_label);
         mLogScroll     = v.findViewById(R.id.agentserver_log_scroll);
 
+        v.findViewById(R.id.agentserver_back_button).setOnClickListener(b -> {
+            if (getActivity() instanceof TermuxActivity) {
+                ((TermuxActivity) getActivity()).navigateBackToCollaboration();
+            }
+        });
         v.findViewById(R.id.btn_agentserver_connect)   .setOnClickListener(b -> doConnect());
         v.findViewById(R.id.btn_agentserver_stop)      .setOnClickListener(b -> doStop());
         v.findViewById(R.id.btn_agentserver_refresh)   .setOnClickListener(b -> checkStatus());
@@ -129,6 +142,13 @@ public class AgentServerFragment extends Fragment {
         String logFile = agentLogFile(prefix, mProvider);
         ProviderProfile profile = ProviderProfile.forProvider(mProvider);
         String processPattern = AgentServerCommandBuilder.processPattern(mProvider);
+        String binary = mProvider == AssistantProvider.CODEX ? "codex" : "agentserver";
+        String missing = mProvider == AssistantProvider.CODEX
+            ? "Codex CLI 未安装"
+            : "AgentServer 未安装";
+        String version = mProvider == AssistantProvider.CODEX
+            ? "codex --version 2>/dev/null"
+            : "agentserver version 2>/dev/null";
 
         String script =
             "if ! command -v proot-distro >/dev/null 2>&1; then\n" +
@@ -143,11 +163,11 @@ public class AgentServerFragment extends Fragment {
             "    echo \"$p\"\n" +
             "  done\n" +
             "}\n" +
-            "if ! proot-distro login --user " + profile.user + " ubuntu -- sh -c 'command -v agentserver >/dev/null 2>&1'; then\n" +
-            "  echo '[!] AgentServer 未安装'; exit 1\n" +
+            "if ! proot-distro login --user " + profile.user + " ubuntu -- sh -c 'command -v " + binary + " >/dev/null 2>&1'; then\n" +
+            "  echo '[!] " + missing + "'; exit 1\n" +
             "fi\n" +
             "echo \"当前助手: " + profile.displayName + "\"\n" +
-            "echo \"版本: $(proot-distro login --user " + profile.user + " ubuntu -- agentserver version 2>/dev/null)\"\n" +
+            "echo \"版本: $(proot-distro login --user " + profile.user + " ubuntu -- " + version + ")\"\n" +
             "echo ''\n" +
             "pids=$(agentserver_pids '" + processPattern + "')\n" +
             "if [ -n \"$pids\" ]; then\n" +
@@ -173,29 +193,34 @@ public class AgentServerFragment extends Fragment {
         mRetryWithoutResume = false;
         String url    = mUrlEdit.getText().toString().trim();
         String code   = mCodeEdit != null ? mCodeEdit.getText().toString().trim() : "";
+        String codexConnectCommand = mCodexCommandEdit != null
+            ? mCodexCommandEdit.getText().toString().trim() : "";
         String device = mDeviceNameEdit.getText().toString().trim();
-        if (url.isEmpty()) {
+        if (mProvider == AssistantProvider.CLAUDE && url.isEmpty()) {
             Toast.makeText(getContext(), "请填写服务器地址", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (mProvider == AssistantProvider.CODEX && codexConnectCommand.isEmpty()) {
+            Toast.makeText(getContext(), "请粘贴 Codex Connector 命令", Toast.LENGTH_SHORT).show();
             return;
         }
         savePrefs();
 
-        // 从 ApiKeyStore 读取激活的 API Key，直接注入 agentserver 进程环境
-        // （proot-distro 不走 login shell，.bashrc 不会自动 source，必须显式传入）
         ProviderProfile profile = ProviderProfile.forProvider(mProvider);
-        ApiKeyStore keyStore = new ApiKeyStore(requireContext(), mProvider);
-        String activeId = keyStore.getActiveId();
         String apiKey = "", apiBaseUrl = "";
-        if (activeId != null) {
-            for (ApiKeyStore.Entry e : keyStore.loadAll()) {
-                if (e.id.equals(activeId)) { apiKey = e.value; apiBaseUrl = e.baseUrl; break; }
+        if (mProvider == AssistantProvider.CLAUDE) {
+            // Claude legacy path still launches agentserver claudecode and needs a local API key.
+            ApiKeyStore keyStore = new ApiKeyStore(requireContext(), mProvider);
+            String activeId = keyStore.getActiveId();
+            if (activeId != null) {
+                for (ApiKeyStore.Entry e : keyStore.loadAll()) {
+                    if (e.id.equals(activeId)) { apiKey = e.value; apiBaseUrl = e.baseUrl; break; }
+                }
             }
-        }
-        if (apiKey.isEmpty()) {
-            Toast.makeText(getContext(),
-                "请先激活 " + profile.displayName + " API Key",
-                Toast.LENGTH_SHORT).show();
-            return;
+            if (mProvider == AssistantProvider.CLAUDE && apiKey.isEmpty()) {
+                Toast.makeText(getContext(), "请先激活 Claude Code API Key", Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
 
         String prefix   = System.getenv("PREFIX");
@@ -204,7 +229,7 @@ public class AgentServerFragment extends Fragment {
         // 优先级：用户手填沙盒 ID > 上次自动保存的 ID > 不传（首次新建）
         String resumeId = !code.isEmpty() ? code : mLastSandboxId;
         AgentServerCommandBuilder.Config cfg = new AgentServerCommandBuilder.Config(
-            url, resumeId, device, apiKey, apiBaseUrl);
+            url, resumeId, device, apiKey, apiBaseUrl, codexConnectCommand);
         String script = AgentServerCommandBuilder.connectScript(mProvider, cfg, prefix);
 
         // 重置授权弹窗状态（每次 doConnect 视为新的一次授权流程）
@@ -230,14 +255,22 @@ public class AgentServerFragment extends Fragment {
                     post(() -> showAuthDialog(authUrl));
                 }
             }
-            if (line.contains("Failed to load session") || line.contains("session not found")
-                    || line.contains("got 401") || line.contains("status code 101 but got")) {
+            if (mProvider == AssistantProvider.CLAUDE && (line.contains("Failed to load session") || line.contains("session not found")
+                    || line.contains("got 401") || line.contains("status code 101 but got"))) {
                 mLastSandboxId = "";
                 saveSandboxId("");
                 mRetryWithoutResume = true;
                 post(() -> {
                     setStatus("● 重试中", "#F57C00");
                     setInfo("沙盒 token 已过期，即将重新创建连接...");
+                });
+                return;
+            }
+            if (mProvider == AssistantProvider.CODEX && line.contains("Codex Connector 进程运行中")) {
+                mConnected = true;
+                post(() -> {
+                    setStatus("● 已连接", "#388E3C");
+                    setInfo("Codex Connector 已启动，手机已作为 AgentServer Connector 运行");
                 });
                 return;
             }
@@ -440,10 +473,12 @@ public class AgentServerFragment extends Fragment {
 
             if (missingBinary) {
                 setStatus("● 未安装", "#888888");
-                setInfo("AgentServer 未安装，请重启应用等待自动安装");
-            } else if (log.contains("不支持 Codex") || log.contains("does not support Codex")) {
-                setStatus("● 不支持", "#E53935");
-                setInfo("当前 AgentServer 不支持 Codex 后端，请更新 AgentServer addon 或切回 Claude");
+                setInfo(mProvider == AssistantProvider.CODEX
+                    ? "Codex CLI 未安装，请确认 Codex runtime 已完成安装"
+                    : "AgentServer 未安装，请重启应用等待自动安装");
+            } else if (log.contains("请粘贴 AgentServer Web UI 生成的 Codex Connector 命令")) {
+                setStatus("● 待配置", "#888888");
+                setInfo("请从 AgentServer Web UI 的 Connectors 页面复制 Codex Connector 命令");
             } else if (badServer) {
                 setStatus("● 失败", "#E53935");
                 setInfo("连接失败：服务器地址可能不对（404 Not Found），请检查 URL 是否为 agentserver 的根地址");
@@ -458,13 +493,17 @@ public class AgentServerFragment extends Fragment {
         }
 
         String log = mLogText.getText().toString();
-        if (log.contains("不支持 Codex") || log.contains("does not support Codex")) {
-            setStatus("● 不支持", "#E53935");
-            setInfo("当前 AgentServer 不支持 Codex 后端，请更新 AgentServer addon 或切回 Claude");
+        if (log.contains("请粘贴 AgentServer Web UI 生成的 Codex Connector 命令")) {
+            setStatus("● 待配置", "#888888");
+            setInfo("请从 AgentServer Web UI 的 Connectors 页面复制 Codex Connector 命令");
         } else if (mConnected) {
             setStatus("● 已连接", "#388E3C");
-            setInfo("AgentServer 已连接到服务器" +
-                (mLastSandboxId.isEmpty() ? "" : "（沙盒: " + mLastSandboxId.substring(0, 8) + "...）"));
+            if (mProvider == AssistantProvider.CODEX) {
+                setInfo("Codex Connector 已启动，手机已作为 AgentServer Connector 运行");
+            } else {
+                setInfo("AgentServer 已连接到服务器" +
+                    (mLastSandboxId.isEmpty() ? "" : "（沙盒: " + mLastSandboxId.substring(0, 8) + "...）"));
+            }
         } else if (mRetryWithoutResume) {
             mRetryWithoutResume = false;
             setStatus("● Token 已过期", "#F57C00");
@@ -549,11 +588,22 @@ public class AgentServerFragment extends Fragment {
     private void loadPrefs() {
         SharedPreferences p = requireContext()
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        refreshProviderFromSettings();
         mUrlEdit.setText(p.getString(KEY_SERVER_URL, ""));
-        mCodeEdit.setText(p.getString(KEY_SANDBOX_CODE, ""));
+        if (mProvider == AssistantProvider.CODEX) {
+            mCodeEdit.setText(firstNonEmpty(
+                p.getString(KEY_WORKSPACE_ID, ""),
+                p.getString(KEY_SANDBOX_CODE, "")));
+        } else {
+            mCodeEdit.setText(firstNonEmpty(
+                p.getString(KEY_SANDBOX_CODE, ""),
+                p.getString(KEY_WORKSPACE_ID, "")));
+        }
+        if (mCodexCommandEdit != null) {
+            mCodexCommandEdit.setText(p.getString(KEY_CODEX_CONNECT_COMMAND, ""));
+        }
         mDeviceNameEdit.setText(p.getString(KEY_DEVICE_NAME, ""));
         mLastSandboxId = p.getString(KEY_SANDBOX_ID, "");
-        refreshProviderFromSettings();
     }
 
     private void savePrefs() {
@@ -561,6 +611,12 @@ public class AgentServerFragment extends Fragment {
             .edit()
             .putString(KEY_SERVER_URL, mUrlEdit.getText().toString().trim())
             .putString(KEY_SANDBOX_CODE, mCodeEdit.getText().toString().trim())
+            .putString(KEY_WORKSPACE_ID, mProvider == AssistantProvider.CODEX
+                ? mCodeEdit.getText().toString().trim()
+                : requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getString(KEY_WORKSPACE_ID, ""))
+            .putString(KEY_CODEX_CONNECT_COMMAND, mCodexCommandEdit == null
+                ? "" : mCodexCommandEdit.getText().toString().trim())
             .putString(KEY_DEVICE_NAME, mDeviceNameEdit.getText().toString().trim())
             .apply();
     }
@@ -587,7 +643,28 @@ public class AgentServerFragment extends Fragment {
         mProvider = new ProviderSettingsStore(requireContext()).getSelectedProvider();
         if (mProviderText != null) {
             ProviderProfile profile = ProviderProfile.forProvider(mProvider);
-            mProviderText.setText("当前助手：" + profile.displayName + "（切换后需重新连接）");
+            if (mProvider == AssistantProvider.CODEX) {
+                mProviderText.setText("当前助手：" + profile.displayName
+                    + "（Driver 为主；Codex Connector / exec-server 可选）");
+            } else {
+                mProviderText.setText("当前助手：" + profile.displayName + "（Driver 为主；旧版 claudecode 连接可选）");
+            }
+        }
+        if (mCodeLabel != null && mCodeEdit != null) {
+            if (mProvider == AssistantProvider.CODEX) {
+                mCodeLabel.setText("工作空间 ID（可选）");
+                mCodeEdit.setHint("例如 ws_...，用于协作页和 Loom 复用");
+            } else {
+                mCodeLabel.setText("工作空间 / 沙盒 ID（可选）");
+                mCodeEdit.setHint("留空则由 Driver 绑定后自动同步 workspace");
+            }
+        }
+        int codexVisibility = mProvider == AssistantProvider.CODEX ? View.VISIBLE : View.GONE;
+        if (mCodexCommandLabel != null) {
+            mCodexCommandLabel.setVisibility(codexVisibility);
+        }
+        if (mCodexCommandEdit != null) {
+            mCodexCommandEdit.setVisibility(codexVisibility);
         }
     }
 
@@ -596,5 +673,13 @@ public class AgentServerFragment extends Fragment {
         return home + (provider == AssistantProvider.CODEX
             ? "/agentserver-codex-agent.log"
             : "/agentserver-agent.log");
+    }
+
+    private static String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty()) return value.trim();
+        }
+        return "";
     }
 }

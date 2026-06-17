@@ -1,5 +1,7 @@
 package com.termux.app.loom;
 
+import com.termux.app.AssistantProvider;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -13,16 +15,16 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(script.contains("command -v driver-agent"));
         Assert.assertTrue(script.contains("command -v slave-agent"));
         Assert.assertTrue(script.contains(
-            "pgrep -f 'observer-server --config /home/claude/\\.loom/observer-local/observer\\.yaml'"));
+            "pgrep -f 'observer-server --config /home/codex/\\.loom/observer-local/observer\\.yaml'"));
         Assert.assertTrue(script.contains(
-            "pgrep -f 'slave-agent /home/claude/\\.loom/slave-local/config\\.yaml'"));
+            "pgrep -f 'slave-agent /home/codex/\\.loom/slave-local/config\\.yaml'"));
     }
 
     @Test
     public void startObserverUsesNohupAndSpecificConfig() {
         String script = LoomCommandBuilder.startObserverScript("/data/data/com.termux/files/usr");
 
-        Assert.assertTrue(script.contains("cd /home/claude/.loom/observer-local"));
+        Assert.assertTrue(script.contains("cd /home/codex/.loom/observer-local"));
         Assert.assertTrue(script.contains("nohup observer-server --config observer.yaml"));
         Assert.assertTrue(script.contains("loom-observer.log"));
     }
@@ -30,17 +32,41 @@ public class LoomCommandBuilderTest {
     @Test
     public void stopScriptsUseNarrowKillPatterns() {
         Assert.assertTrue(LoomCommandBuilder.stopObserverScript()
-            .contains("pkill -f 'observer-server --config /home/claude/\\.loom/observer-local/observer\\.yaml'"));
+            .contains("pkill -f 'observer-server --config /home/codex/\\.loom/observer-local/observer\\.yaml'"));
         Assert.assertTrue(LoomCommandBuilder.stopSlaveScript()
-            .contains("pkill -f 'slave-agent /home/claude/\\.loom/slave-local/config\\.yaml'"));
+            .contains("pkill -f 'slave-agent /home/codex/\\.loom/slave-local/config\\.yaml'"));
     }
 
     @Test
     public void registerDriverUsesExpectedProjectPath() {
         String script = LoomCommandBuilder.registerDriverScript();
 
-        Assert.assertTrue(script.contains("/home/claude/loom-driver/driver-agent register"));
-        Assert.assertTrue(script.contains("--config /home/claude/loom-driver/config.yaml"));
+        Assert.assertTrue(script.contains("/home/codex/loom-driver/driver-agent register"));
+        Assert.assertTrue(script.contains("--config /home/codex/loom-driver/config.yaml"));
+    }
+
+    @Test
+    public void bindDriverUsesCurrentProviderProjectPathAndReadableLabel() {
+        String script = LoomCommandBuilder.bindDriverScript(LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX));
+
+        Assert.assertTrue(script.contains("绑定 Driver 到当前 Agent"));
+        Assert.assertTrue(script.contains("proot-distro login --user codex ubuntu"));
+        Assert.assertTrue(script.contains("/home/codex/loom-driver/driver-agent register"));
+        Assert.assertTrue(script.contains("--config /home/codex/loom-driver/config.yaml"));
+        Assert.assertTrue(script.contains("loom-driver-bind.log"));
+    }
+
+    @Test
+    public void bindDriverIfNeededReusesRegisteredConfigBeforeRegistering() {
+        String script = LoomCommandBuilder.bindDriverIfNeededScript(LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX));
+
+        Assert.assertTrue(script.contains("Driver already registered; reusing existing config"));
+        Assert.assertTrue(script.contains("driver_has_identity"));
+        Assert.assertTrue(script.contains("driver_server_matches"));
+        Assert.assertTrue(script.contains("/home/codex/loom-driver/driver-agent register"));
+        Assert.assertTrue(script.contains("tee -a \"$HOME/loom-driver-bind.log\""));
     }
 
     @Test
@@ -65,7 +91,7 @@ public class LoomCommandBuilderTest {
         String stopScript = LoomCommandBuilder.stopObserverScript();
 
         Assert.assertTrue(startScript.contains(
-            "observer-server --config /home/claude/.loom/observer-local/observer.yaml"));
+            "observer-server --config /home/codex/.loom/observer-local/observer.yaml"));
         Assert.assertTrue(statusScript.contains("observer-local/observer\\.yaml"));
         Assert.assertTrue(stopScript.contains("observer-local/observer\\.yaml"));
     }
@@ -74,8 +100,8 @@ public class LoomCommandBuilderTest {
     public void registerDriverKeepsStdoutVisibleWhileLogging() {
         String script = LoomCommandBuilder.registerDriverScript();
 
-        Assert.assertTrue(script.contains("tee -a \"$HOME/loom-driver-register.log\""));
-        Assert.assertFalse(script.contains(">> \"$HOME/loom-driver-register.log\" 2>&1"));
+        Assert.assertTrue(script.contains("tee -a \"$HOME/loom-driver-bind.log\""));
+        Assert.assertFalse(script.contains(">> \"$HOME/loom-driver-bind.log\" 2>&1"));
     }
 
     @Test
@@ -87,20 +113,58 @@ public class LoomCommandBuilderTest {
 
     @Test
     public void setupConfigWritesAllRoleConfigsAndDriverMcpFile() {
-        String script = LoomCommandBuilder.setupConfigScript(LoomSettings.defaults());
+        String script = LoomCommandBuilder.setupConfigScript(claudeSettings());
 
         Assert.assertTrue(script.contains("/home/claude/.loom/observer-local/observer.yaml"));
         Assert.assertTrue(script.contains("/home/claude/loom-driver/config.yaml"));
         Assert.assertTrue(script.contains("/home/claude/.loom/slave-local/config.yaml"));
         Assert.assertTrue(script.contains("/home/claude/loom-driver/.mcp.json"));
+        Assert.assertTrue(script.contains("/home/claude/loom-driver/.claude/skills"));
         Assert.assertTrue(script.contains("base64 -d"));
         Assert.assertTrue(script.contains("chmod 600"));
     }
 
     @Test
+    public void setupConfigPreservesRegisteredDriverConfigByDefault() {
+        String script = LoomCommandBuilder.setupConfigScript(LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX));
+
+        Assert.assertTrue(script.contains("Keeping registered Driver config"));
+        Assert.assertTrue(script.contains("driver_has_identity"));
+        Assert.assertTrue(script.contains("driver_server_matches"));
+        Assert.assertTrue(script.contains("/home/codex/loom-driver/config.yaml.tmp.android"));
+    }
+
+    @Test
+    public void setupConfigCanResetDriverConfigForExplicitBinding() {
+        String script = LoomCommandBuilder.setupConfigScript(LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX), true);
+
+        Assert.assertFalse(script.contains("Keeping registered Driver config"));
+        Assert.assertFalse(script.contains("driver_has_identity"));
+        Assert.assertTrue(script.contains("base64 -d > /home/codex/loom-driver/config.yaml"));
+    }
+
+    @Test
+    public void readDriverConfigScriptOnlyEmitsPublicIdentityFields() {
+        String script = LoomCommandBuilder.readDriverConfigScript(LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX));
+
+        Assert.assertTrue(script.contains("proot-distro login --user codex ubuntu"));
+        Assert.assertTrue(script.contains(LoomCommandBuilder.DRIVER_CONFIG_BEGIN_MARKER));
+        Assert.assertTrue(script.contains(LoomCommandBuilder.DRIVER_CONFIG_END_MARKER));
+        Assert.assertTrue(script.contains("/home/codex/loom-driver/config.yaml"));
+        Assert.assertTrue(script.contains("sandbox_id"));
+        Assert.assertTrue(script.contains("workspace_id"));
+        Assert.assertTrue(script.contains("short_id"));
+        Assert.assertFalse(script.contains("tunnel_token"));
+        Assert.assertFalse(script.contains("proxy_token"));
+    }
+
+    @Test
     public void codexSetupWritesCodexRuntimePaths() {
         LoomSettings settings = LoomSettings.defaults()
-            .withAgentProvider(com.termux.app.AssistantProvider.CODEX);
+            .withAgentProvider(AssistantProvider.CODEX);
 
         String script = LoomCommandBuilder.setupConfigScript(settings);
 
@@ -108,13 +172,16 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(script.contains("/home/codex/.loom/observer-local/observer.yaml"));
         Assert.assertTrue(script.contains("/home/codex/loom-driver/config.yaml"));
         Assert.assertTrue(script.contains("/home/codex/.loom/slave-local/config.yaml"));
+        Assert.assertTrue(script.contains("/home/codex/.codex/config.toml"));
+        Assert.assertTrue(script.contains("[mcp_servers.loom-driver]"));
+        Assert.assertTrue(script.contains("command = \"/home/codex/loom-driver/driver-agent\""));
         Assert.assertFalse(script.contains("/home/claude/loom-driver/config.yaml"));
     }
 
     @Test
     public void codexLifecycleScriptsUseCodexUserPathsAndProcesses() {
         LoomSettings settings = LoomSettings.defaults()
-            .withAgentProvider(com.termux.app.AssistantProvider.CODEX);
+            .withAgentProvider(AssistantProvider.CODEX);
 
         String statusScript = LoomCommandBuilder.statusScript("/data/data/com.termux/files/usr", settings);
         String startObserverScript = LoomCommandBuilder.startObserverScript(
@@ -149,9 +216,9 @@ public class LoomCommandBuilderTest {
     @Test
     public void startScriptsNohupOuterProotCommand() {
         Assert.assertTrue(LoomCommandBuilder.startObserverScript("/data/data/com.termux/files/usr")
-            .contains("nohup proot-distro login --user claude ubuntu"));
+            .contains("nohup proot-distro login --user codex ubuntu"));
         Assert.assertTrue(LoomCommandBuilder.startSlaveScript("/data/data/com.termux/files/usr")
-            .contains("nohup proot-distro login --user claude ubuntu"));
+            .contains("nohup proot-distro login --user codex ubuntu"));
     }
 
     @Test
@@ -173,5 +240,9 @@ public class LoomCommandBuilderTest {
     public void stopScriptsTolerateProcessExitBetweenLookupAndKill() {
         Assert.assertTrue(LoomCommandBuilder.stopObserverScript().contains("kill $pids 2>/dev/null || true"));
         Assert.assertTrue(LoomCommandBuilder.stopSlaveScript().contains("kill $pids 2>/dev/null || true"));
+    }
+
+    private static LoomSettings claudeSettings() {
+        return LoomSettings.defaults().withAgentProvider(AssistantProvider.CLAUDE);
     }
 }

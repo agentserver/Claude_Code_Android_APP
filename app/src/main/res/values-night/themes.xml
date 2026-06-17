@@ -7,6 +7,31 @@
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <!-- See https://developer.android.com/training/material/theme.html for how to customize the Material theme. -->
     <!-- NOTE: Cannot use "Light." since it hides the terminal scrollbar on the default black background. -->
+    <style name="Theme.ClaudeSettings.Light.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/app_primary</item>
+        <item name="colorPrimaryVariant">@color/app_primary</item>
+        <item name="colorPrimaryDark">@color/app_card_bg</item>
+        <item name="colorSecondary">@color/app_primary</item>
+        <item name="colorOnPrimary">@color/app_text_primary</item>
+        <item name="colorAccent">@color/app_primary</item>
+        <item name="colorControlNormal">@color/app_text_secondary</item>
+        <item name="colorControlActivated">@color/app_primary</item>
+        <item name="android:colorAccent">@color/app_primary</item>
+        <item name="android:windowBackground">@color/app_bg_secondary</item>
+        <item name="android:navigationBarColor">@color/app_card_bg</item>
+        <item name="android:statusBarColor">@color/app_bg_secondary</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:textColorPrimary">@color/app_text_primary</item>
+        <item name="android:textColorSecondary">@color/app_text_secondary</item>
+        <item name="android:textColorLink">@color/app_primary</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="preferenceTheme">@style/ThemeOverlay.ClaudeSettings.Preference</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.MaterialComponents.MaterialAlertDialog</item>
+    </style>
+
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/black</item>

@@ -5,22 +5,42 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF">
+    android:background="@color/app_bg_secondary">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="12dp"
-        android:background="#F5F5F5"
+        android:background="@drawable/bg_section_header"
         android:gravity="center_vertical">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/loom_back_button"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="返回协作"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="40dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:text=""
+            app:icon="@drawable/ic_arrow_back_24"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconTint="@color/app_primary" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Loom"
-            android:textColor="#212121"
+            android:textColor="@color/app_text_primary"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -29,13 +49,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="● 未检查"
-            android:textColor="#888888"
+            android:textColor="@color/app_text_muted"
             android:textSize="12sp"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:background="#E0E0E0" />
+            android:background="@drawable/bg_status_chip" />
 
     </LinearLayout>
 
@@ -55,10 +75,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="6dp"
-                android:background="#F8F8F8"
+                android:background="@drawable/bg_settings_summary"
                 android:padding="10dp"
-                android:text="Loom 使用共享 Ubuntu 环境，按角色生成配置并启动本机服务。"
-                android:textColor="#555555"
+                android:text="Loom 复用 AgentServer 的服务器、工作空间和设备配置；此页只管理 Loom 角色、Observer 和本机 Agent 名称。"
+                android:textColor="@color/app_primary"
                 android:textSize="13sp" />
 
             <TextView
@@ -67,357 +87,272 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="14dp"
                 android:text="当前助手：Claude Code"
-                android:textColor="#666666"
+                android:textColor="@color/app_text_secondary"
                 android:textSize="12sp" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="本机角色"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <Spinner
-                android:id="@+id/loom_role_mode"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Observer URL"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_observer_url"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="http://127.0.0.1:8090"
-                android:inputType="textUri"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Workspace ID"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_workspace_id"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="ws-phone"
-                android:inputType="text"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Workspace API Key"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_workspace_api_key"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="Observer bootstrap key"
-                android:inputType="textPassword"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="AgentServer URL"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_agentserver_url"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="https://agent.cs.ac.cn"
-                android:inputType="textUri"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Observer 名称"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_observer_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="observer-phone"
-                android:inputType="text"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Driver 名称"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_driver_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="driver-phone"
-                android:inputType="text"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Slave 名称"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_slave_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="slave-phone"
-                android:inputType="text"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:text="Slave 标签"
-                android:textColor="#212121"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/loom_tags"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:background="#EEEEEE"
-                android:hint="android,phone,aarch64"
-                android:inputType="text"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="10dp"
-                android:singleLine="true"
-                android:textColor="#212121"
-                android:textColorHint="#AAAAAA" />
-
-            <LinearLayout
+            <!-- Card 1: Role & Observer -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:orientation="horizontal">
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/app_border"
+                app:cardBackgroundColor="@color/app_card_bg">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_save"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#1976D2"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="保存"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_status"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="刷新状态"
-                    android:textColor="#555555"
-                    android:textSize="13sp"
-                    app:strokeColor="#BDBDBD" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="本机角色"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
-            </LinearLayout>
+                    <Spinner
+                        android:id="@+id/loom_role_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="@drawable/bg_input_field"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_loom_setup"
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Observer URL"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_observer_url"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="http://127.0.0.1:8090"
+                        android:inputType="textUri"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Observer API Key"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_observer_api_key"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="Observer bootstrap key"
+                        android:inputType="textPassword"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Card 2: Loom Names -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="36dp"
+                android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:backgroundTint="#388E3C"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="生成配置"
-                android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/app_border"
+                app:cardBackgroundColor="@color/app_card_bg">
 
-            <LinearLayout
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Observer 名称"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_observer_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="observer-phone"
+                        android:inputType="text"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Driver 名称"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_driver_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="driver-phone"
+                        android:inputType="text"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Slave 名称"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_slave_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="slave-phone"
+                        android:inputType="text"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Slave 标签"
+                        android:textColor="@color/app_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/loom_tags"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_input_field"
+                        android:hint="android,phone,aarch64"
+                        android:inputType="text"
+                        android:paddingStart="12dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="10dp"
+                        android:singleLine="true"
+                        android:textColor="@color/app_text_primary"
+                        android:textColorHint="@color/app_text_hint" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Card 3: Actions -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:orientation="horizontal">
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/app_border"
+                app:cardBackgroundColor="@color/app_card_bg">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_start_observer"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="启动 Observer"
-                    android:textColor="#1976D2"
-                    android:textSize="13sp"
-                    app:strokeColor="#1976D2" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_stop_observer"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="停止 Observer"
-                    android:textColor="#F57C00"
-                    android:textSize="13sp"
-                    app:strokeColor="#F57C00" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:orientation="horizontal">
 
-            </LinearLayout>
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_loom_save"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_marginEnd="4dp"
+                            android:layout_weight="1"
+                            android:backgroundTint="@color/app_primary"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:text="保存"
+                            android:textColor="@android:color/white"
+                            android:textSize="13sp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_loom_register_driver"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="36dp"
-                android:layout_marginBottom="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="注册 Driver"
-                android:textColor="#1976D2"
-                android:textSize="13sp"
-                app:strokeColor="#1976D2" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_loom_status"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="4dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:text="刷新状态"
+                            android:textColor="@color/app_text_secondary"
+                            android:textSize="13sp"
+                            app:strokeColor="@color/app_border" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                    </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_start_slave"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="启动 Slave"
-                    android:textColor="#1976D2"
-                    android:textSize="13sp"
-                    app:strokeColor="#1976D2" />
+                </LinearLayout>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_loom_stop_slave"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="停止 Slave"
-                    android:textColor="#F57C00"
-                    android:textSize="13sp"
-                    app:strokeColor="#F57C00" />
-
-            </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
 
@@ -427,7 +362,7 @@
         android:layout_width="match_parent"
         android:layout_height="200dp"
         android:orientation="vertical"
-        android:background="#F5F5F5">
+        android:background="@color/app_log_bg">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -445,7 +380,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="执行日志"
-                android:textColor="#888888"
+                android:textColor="@color/app_text_muted"
                 android:textSize="11sp" />
 
             <com.google.android.material.button.MaterialButton
@@ -458,7 +393,7 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="4dp"
                 android:text="实时监控"
-                android:textColor="#1976D2"
+                android:textColor="@color/app_primary"
                 android:textSize="11sp" />
 
             <com.google.android.material.button.MaterialButton
@@ -471,7 +406,7 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="0dp"
                 android:text="清空"
-                android:textColor="#AAAAAA"
+                android:textColor="@color/app_text_hint"
                 android:textSize="11sp" />
 
         </LinearLayout>
@@ -492,7 +427,7 @@
                     android:id="@+id/loom_log"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="#333333"
+                    android:textColor="@color/app_text_primary"
                     android:textSize="10sp"
                     android:fontFamily="monospace"
                     android:paddingStart="12dp"

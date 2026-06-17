@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
@@ -47,12 +48,12 @@ public class AgentTaskListAdapter
         h.preview.setText(preview.isEmpty() ? "（空任务）" : preview);
         if (t.status == AgentTask.Status.RUNNING) {
             h.status.setText("● 运行中");
-            h.status.setTextColor(0xFFFFFFFF);
-            h.status.setBackgroundColor(0xFFF57C00);
+            h.status.setTextColor(ContextCompat.getColor(h.itemView.getContext(), R.color.app_warning));
+            h.status.setBackgroundResource(R.drawable.bg_status_chip);
         } else {
             h.status.setText("● 已完成");
-            h.status.setTextColor(0xFFFFFFFF);
-            h.status.setBackgroundColor(0xFF388E3C);
+            h.status.setTextColor(ContextCompat.getColor(h.itemView.getContext(), R.color.app_success));
+            h.status.setBackgroundResource(R.drawable.bg_status_chip);
         }
         h.itemView.setOnClickListener(v -> mListener.onTap(t));
         h.itemView.setOnLongClickListener(v -> { mListener.onLongPress(t); return true; });
