@@ -60,6 +60,14 @@ public final class CollaborationConnectionState {
         return DRIVER_STATUS_VALID.equals(clean(driverStatus));
     }
 
+    public static String driverStatusAfterCredentialProbe(String driverStatus, boolean credentialsValid) {
+        String status = clean(driverStatus);
+        if (DRIVER_STATUS_VALID.equals(status) && !credentialsValid) {
+            return DRIVER_STATUS_STALE;
+        }
+        return status;
+    }
+
     public static boolean hasWorkspaceIdentity(String workspaceId) {
         return !clean(workspaceId).isEmpty();
     }

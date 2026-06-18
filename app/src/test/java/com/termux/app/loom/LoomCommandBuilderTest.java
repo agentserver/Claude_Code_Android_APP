@@ -352,8 +352,11 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(script.contains("sandbox_id"));
         Assert.assertTrue(script.contains("workspace_id"));
         Assert.assertTrue(script.contains("short_id"));
-        Assert.assertFalse(script.contains("tunnel_token"));
-        Assert.assertFalse(script.contains("proxy_token"));
+        Assert.assertTrue(script.contains("driver_credentials_valid"));
+        Assert.assertTrue(script.contains(LoomCommandBuilder.DRIVER_CREDENTIALS_VALID_MARKER));
+        Assert.assertTrue(script.contains(LoomCommandBuilder.DRIVER_CREDENTIALS_INVALID_MARKER));
+        Assert.assertTrue(script.contains(
+            "server:|credentials:|[[:space:]]+(url|name|sandbox_id|workspace_id|short_id):"));
     }
 
     @Test

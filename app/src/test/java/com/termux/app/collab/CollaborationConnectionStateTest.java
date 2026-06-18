@@ -75,6 +75,22 @@ public class CollaborationConnectionStateTest {
     }
 
     @Test
+    public void validDriverStatusBecomesStaleWhenCredentialProbeFails() {
+        Assert.assertEquals(CollaborationConnectionState.DRIVER_STATUS_STALE,
+            CollaborationConnectionState.driverStatusAfterCredentialProbe(
+                CollaborationConnectionState.DRIVER_STATUS_VALID,
+                false));
+        Assert.assertEquals(CollaborationConnectionState.DRIVER_STATUS_VALID,
+            CollaborationConnectionState.driverStatusAfterCredentialProbe(
+                CollaborationConnectionState.DRIVER_STATUS_VALID,
+                true));
+        Assert.assertEquals(CollaborationConnectionState.DRIVER_STATUS_FAILED,
+            CollaborationConnectionState.driverStatusAfterCredentialProbe(
+                CollaborationConnectionState.DRIVER_STATUS_FAILED,
+                false));
+    }
+
+    @Test
     public void driverBindingCanStartWithServerUrlBeforeWorkspaceIsKnown() {
         Assert.assertTrue(CollaborationConnectionState.canBindDriver(
             "https://agent.cs.ac.cn/",

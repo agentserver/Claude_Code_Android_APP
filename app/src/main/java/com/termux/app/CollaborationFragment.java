@@ -73,6 +73,7 @@ public class CollaborationFragment extends Fragment {
     private TextView mEmptySlavesText;
     private LinearLayout mSlaveList;
     private Thread mDriverBindingThread;
+    private Thread mDriverValidationThread;
     private Thread mLoomRuntimeThread;
     private Process mLoomRuntimeProcess;
     private AlertDialog mAuthDialog;
@@ -148,6 +149,9 @@ public class CollaborationFragment extends Fragment {
         if (mDriverBindingThread != null && mDriverBindingThread.isAlive()) {
             mDriverBindingThread.interrupt();
         }
+        if (mDriverValidationThread != null && mDriverValidationThread.isAlive()) {
+            mDriverValidationThread.interrupt();
+        }
         if (mLoomRuntimeProcess != null) {
             mLoomRuntimeProcess.destroy();
             mLoomRuntimeProcess = null;
@@ -174,6 +178,7 @@ public class CollaborationFragment extends Fragment {
             String status = currentDriverBindingStatus(profile.provider);
             mDriverBindingStatus.setText(driverBindingStatusText(status));
             updateDriverBindingDot(status);
+            validateDriverBindingIfNeeded(profile.provider, status);
         }
 
         SharedPreferences agentPrefs = requireContext()
@@ -600,6 +605,8 @@ public class CollaborationFragment extends Fragment {
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
             String line;
             boolean readingDriverConfig = false;
+            boolean credentialsValid = false;
+            boolean credentialsProbeSeen = false;
             StringBuilder driverConfig = new StringBuilder();
             while ((line = reader.readLine()) != null) {
                 if (Thread.currentThread().isInterrupted()) {
@@ -618,19 +625,35 @@ public class CollaborationFragment extends Fragment {
                     driverConfig.append(line).append('\n');
                     continue;
                 }
+                if (LoomCommandBuilder.DRIVER_CREDENTIALS_VALID_MARKER.equals(line.trim())) {
+                    credentialsValid = true;
+                    credentialsProbeSeen = true;
+                    continue;
+                }
+                if (LoomCommandBuilder.DRIVER_CREDENTIALS_INVALID_MARKER.equals(line.trim())) {
+                    credentialsValid = false;
+                    credentialsProbeSeen = true;
+                    continue;
+                }
                 maybeShowAuthUrl(line);
             }
             int exit = process.waitFor();
             LoomDriverConfigIdentity identity = exit == 0
                 ? LoomDriverConfigIdentity.parse(driverConfig.toString())
                 : LoomDriverConfigIdentity.empty();
+            boolean driverReady = identity.hasRemoteIdentity()
+                && (!credentialsProbeSeen || credentialsValid);
             post(() -> {
                 dismissAuthDialog();
-                if (exit == 0 && identity.hasRemoteIdentity()) {
+                if (exit == 0 && driverReady) {
                     saveDriverBindingSuccess(profile.provider, identity);
                     updateDriverBindingDot(CollaborationConnectionState.DRIVER_STATUS_VALID);
                     setDriverBindingStatus("Driver：已绑定到 " + profile.displayName);
                     refreshDashboard();
+                } else if (exit == 0 && identity.hasRemoteIdentity()) {
+                    setDriverBindingStatusPref(CollaborationConnectionState.DRIVER_STATUS_STALE, "");
+                    updateDriverBindingDot(CollaborationConnectionState.DRIVER_STATUS_STALE);
+                    setDriverBindingStatus("Driver：需重新绑定");
                 } else if (exit == 0) {
                     setDriverBindingStatusPref(CollaborationConnectionState.DRIVER_STATUS_FAILED, "");
                     updateDriverBindingDot(CollaborationConnectionState.DRIVER_STATUS_FAILED);
@@ -649,6 +672,73 @@ public class CollaborationFragment extends Fragment {
                 updateDriverBindingDot(CollaborationConnectionState.DRIVER_STATUS_FAILED);
                 setDriverBindingStatus("Driver：绑定失败");
             });
+        }
+    }
+
+    private void validateDriverBindingIfNeeded(AssistantProvider provider, String status) {
+        if (!CollaborationConnectionState.DRIVER_STATUS_VALID.equals(status)) return;
+        if (mDriverBindingThread != null && mDriverBindingThread.isAlive()) return;
+        if (mDriverValidationThread != null && mDriverValidationThread.isAlive()) return;
+
+        AssistantProvider safe = provider == null ? AssistantProvider.CODEX : provider;
+        String script = LoomCommandBuilder.readDriverConfigScript(
+            currentLoomSettings().withAgentProvider(safe));
+        mDriverValidationThread = new Thread(() -> runDriverValidationScript(script),
+            "loom-driver-validate-" + safe.id);
+        mDriverValidationThread.setDaemon(true);
+        mDriverValidationThread.start();
+    }
+
+    private void runDriverValidationScript(String script) {
+        String prefix = prefix();
+        String bash = prefix + "/bin/bash";
+        String sysPath = System.getenv("PATH");
+        if (sysPath == null) sysPath = "";
+        String termuxPath = prefix + "/bin:" + prefix + "/bin/applets:" + sysPath;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(bash, "-c", script);
+            pb.redirectErrorStream(true);
+            java.util.Map<String, String> env = pb.environment();
+            env.putAll(System.getenv());
+            env.put("PATH", termuxPath);
+            env.put("PREFIX", prefix);
+            env.put("HOME", prefix + "/../home");
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+            String line;
+            boolean credentialsValid = false;
+            boolean credentialsProbeSeen = false;
+            while ((line = reader.readLine()) != null) {
+                if (Thread.currentThread().isInterrupted()) {
+                    process.destroy();
+                    return;
+                }
+                if (LoomCommandBuilder.DRIVER_CREDENTIALS_VALID_MARKER.equals(line.trim())) {
+                    credentialsValid = true;
+                    credentialsProbeSeen = true;
+                } else if (LoomCommandBuilder.DRIVER_CREDENTIALS_INVALID_MARKER.equals(line.trim())) {
+                    credentialsValid = false;
+                    credentialsProbeSeen = true;
+                }
+            }
+            int exit = process.waitFor();
+            boolean valid = exit == 0 && credentialsProbeSeen && credentialsValid;
+            post(() -> {
+                if (getContext() == null) return;
+                String current = currentDriverBindingStatus(
+                    new ProviderSettingsStore(requireContext()).getSelectedProvider());
+                String next = CollaborationConnectionState.driverStatusAfterCredentialProbe(
+                    current,
+                    valid);
+                if (!current.equals(next)) {
+                    setDriverBindingStatusPref(next, "");
+                    updateDriverBindingDot(next);
+                    setDriverBindingStatus(driverBindingStatusText(next));
+                }
+            });
+        } catch (InterruptedException ignored) {
+        } catch (Exception ignored) {
         }
     }
 

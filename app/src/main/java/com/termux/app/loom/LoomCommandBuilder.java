@@ -7,6 +7,8 @@ public final class LoomCommandBuilder {
 
     public static final String DRIVER_CONFIG_BEGIN_MARKER = "__LOOM_DRIVER_CONFIG_PUBLIC_IDENTITY_BEGIN__";
     public static final String DRIVER_CONFIG_END_MARKER = "__LOOM_DRIVER_CONFIG_PUBLIC_IDENTITY_END__";
+    public static final String DRIVER_CREDENTIALS_VALID_MARKER = "__LOOM_DRIVER_CREDENTIALS_VALID__=1";
+    public static final String DRIVER_CREDENTIALS_INVALID_MARKER = "__LOOM_DRIVER_CREDENTIALS_VALID__=0";
 
     private LoomCommandBuilder() {
     }
@@ -182,11 +184,17 @@ public final class LoomCommandBuilder {
         LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
         Paths p = paths(safeSettings);
         String command = ""
+            + driverConfigIdentityFunctions()
             + "_driver_cfg=" + shellQuote(p.driverConfig) + "\n"
             + "test -f \"$_driver_cfg\"\n"
             + "echo " + shellQuote(DRIVER_CONFIG_BEGIN_MARKER) + "\n"
             + "grep -E '^(server:|credentials:|[[:space:]]+(url|name|sandbox_id|workspace_id|short_id):)' \"$_driver_cfg\" || true\n"
-            + "echo " + shellQuote(DRIVER_CONFIG_END_MARKER) + "\n";
+            + "echo " + shellQuote(DRIVER_CONFIG_END_MARKER) + "\n"
+            + "if driver_credentials_valid \"$_driver_cfg\"; then\n"
+            + "  echo " + shellQuote(DRIVER_CREDENTIALS_VALID_MARKER) + "\n"
+            + "else\n"
+            + "  echo " + shellQuote(DRIVER_CREDENTIALS_INVALID_MARKER) + "\n"
+            + "fi\n";
 
         return header()
             + "command -v proot-distro\n"
