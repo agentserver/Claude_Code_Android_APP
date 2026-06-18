@@ -44,7 +44,6 @@ import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.app.activities.HelpActivity;
-import com.termux.app.activities.SettingsActivity;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.terminal.TermuxSessionsListViewController;
@@ -620,7 +619,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setSettingsButtonView() {
         ImageButton settingsButton = findViewById(R.id.settings_button);
         settingsButton.setOnClickListener(v -> {
-            ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+            showAppSettingsMode();
         });
     }
 
@@ -671,7 +670,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (isFragmentVisible("automation_settings")
-                || isFragmentVisible("workspace_access_settings")) {
+                || isFragmentVisible("workspace_access_settings")
+                || isFragmentVisible("app_settings")) {
+            if (isFragmentVisible("app_settings") && handleVisibleAppSettingsBack()) {
+                return true;
+            }
             navigateBackToSettingsHub();
             return true;
         }
@@ -695,6 +698,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment fragment =
             getSupportFragmentManager().findFragmentByTag(tag);
         return fragment != null && fragment.isVisible();
+    }
+
+    private boolean handleVisibleAppSettingsBack() {
+        androidx.fragment.app.Fragment fragment =
+            getSupportFragmentManager().findFragmentByTag("app_settings");
+        return fragment instanceof AppSettingsFragment
+            && fragment.isVisible()
+            && ((AppSettingsFragment) fragment).handleBackPressed();
     }
 
     public void finishActivityIfNotFinishing() {
@@ -782,7 +793,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ActivityUtils.startActivity(this, new Intent(this, HelpActivity.class));
                 return true;
             case CONTEXT_MENU_SETTINGS_ID:
-                ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+                showAppSettingsMode();
                 return true;
             case CONTEXT_MENU_REPORT_ID:
                 mTermuxTerminalViewClient.reportIssueFromTranscript();
@@ -1116,6 +1127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF   = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (homeF == null) {
             ft.add(R.id.home_fragment_container, new HomeFragment(), "home");
@@ -1129,6 +1141,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF     != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF   != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1158,6 +1171,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (collaborationF == null) {
             ft.add(R.id.home_fragment_container, new CollaborationFragment(), "collaboration");
@@ -1171,6 +1185,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1201,6 +1216,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF  = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         if (apiF == null) {
             ft.add(R.id.home_fragment_container, new ApiKeyFragment(), "apikey");
         } else {
@@ -1212,6 +1228,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (loomF     != null) ft.hide(loomF);
         if (settingsF != null) ft.hide(settingsF);
         if (autoF     != null) ft.hide(autoF);
+        if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF   != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1241,6 +1259,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF  = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (agentF == null) {
             ft.add(R.id.home_fragment_container, new AgentServerFragment(), "agentserver");
@@ -1254,6 +1273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF     != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF   != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1283,6 +1303,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF  = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (loomF == null) {
             ft.add(R.id.home_fragment_container, new LoomFragment(), "loom");
@@ -1296,6 +1317,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF     != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF   != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1325,6 +1347,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF    = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF  = fm.findFragmentByTag("agent_task_detail");
         if (settingsF == null) {
             ft.add(R.id.home_fragment_container, new SettingsHubFragment(), "settings_hub");
@@ -1338,7 +1361,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (loomF   != null) ft.hide(loomF);
         if (autoF   != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF != null) ft.remove(detailF);
+        ft.commit();
+    }
+
+    /** 切换到应用设置页面，保留底部导航栏。 */
+    public void showAppSettingsMode() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        if (bottomNav != null && bottomNav.getSelectedItemId() != R.id.nav_settings) {
+            bottomNav.setSelectedItemId(R.id.nav_settings);
+        }
+
+        DrawerLayout drawer = getDrawer();
+        ViewPager toolbar = getTerminalToolbarViewPager();
+        View container = findViewById(R.id.home_fragment_container);
+        if (container == null) return;
+
+        if (drawer != null) {
+            if (drawer.isDrawerOpen(android.view.Gravity.START)) {
+                drawer.closeDrawer(android.view.Gravity.START);
+            }
+            drawer.setVisibility(View.GONE);
+        }
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
+        clearFocusAndHideKeyboard();
+
+        androidx.fragment.app.FragmentManager fm = getSupportFragmentManager();
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        androidx.fragment.app.Fragment homeF     = fm.findFragmentByTag("home");
+        androidx.fragment.app.Fragment collaborationF = fm.findFragmentByTag("collaboration");
+        androidx.fragment.app.Fragment apiF      = fm.findFragmentByTag("apikey");
+        androidx.fragment.app.Fragment agentF    = fm.findFragmentByTag("agentserver");
+        androidx.fragment.app.Fragment loomF     = fm.findFragmentByTag("loom");
+        androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
+        androidx.fragment.app.Fragment autoF     = fm.findFragmentByTag("automation_settings");
+        androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
+        androidx.fragment.app.Fragment detailF   = fm.findFragmentByTag("agent_task_detail");
+        if (appSettingsF == null) {
+            ft.add(R.id.home_fragment_container, new AppSettingsFragment(), "app_settings");
+        } else {
+            ft.show(appSettingsF);
+        }
+        if (homeF     != null) ft.hide(homeF);
+        if (collaborationF != null) ft.hide(collaborationF);
+        if (apiF      != null) ft.hide(apiF);
+        if (agentF    != null) ft.hide(agentF);
+        if (loomF     != null) ft.hide(loomF);
+        if (settingsF != null) ft.hide(settingsF);
+        if (autoF     != null) ft.hide(autoF);
+        if (workspaceF != null) ft.hide(workspaceF);
+        if (detailF   != null) ft.remove(detailF);
+        container.setVisibility(View.VISIBLE);
         ft.commit();
     }
 
@@ -1357,6 +1432,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF     = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         if (autoF == null) {
             ft.add(R.id.home_fragment_container, new AutomationSettingsFragment(), "automation_settings");
         } else {
@@ -1369,6 +1445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (loomF     != null) ft.hide(loomF);
         if (settingsF != null) ft.hide(settingsF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         ft.commit();
     }
 
@@ -1387,6 +1464,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF     = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF   = fm.findFragmentByTag("agent_task_detail");
         if (workspaceF == null) {
             ft.add(R.id.home_fragment_container,
@@ -1401,6 +1479,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (loomF     != null) ft.hide(loomF);
         if (settingsF != null) ft.hide(settingsF);
         if (autoF     != null) ft.hide(autoF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF   != null) ft.remove(detailF);
         ft.commit();
     }
@@ -1435,6 +1514,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF   = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (homeF   != null) ft.hide(homeF);
         if (collaborationF != null) ft.hide(collaborationF);
@@ -1444,6 +1524,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF   != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF != null) ft.remove(detailF);
         ft.add(R.id.home_fragment_container,
             AgentTaskDetailFragment.newInstance(provider, taskId), "agent_task_detail");
@@ -1470,6 +1551,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.fragment.app.Fragment settingsF = fm.findFragmentByTag("settings_hub");
         androidx.fragment.app.Fragment autoF  = fm.findFragmentByTag("automation_settings");
         androidx.fragment.app.Fragment workspaceF = fm.findFragmentByTag("workspace_access_settings");
+        androidx.fragment.app.Fragment appSettingsF = fm.findFragmentByTag("app_settings");
         androidx.fragment.app.Fragment detailF = fm.findFragmentByTag("agent_task_detail");
         if (homeF  != null) ft.hide(homeF);
         if (collaborationF != null) ft.hide(collaborationF);
@@ -1479,6 +1561,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (settingsF != null) ft.hide(settingsF);
         if (autoF  != null) ft.hide(autoF);
         if (workspaceF != null) ft.hide(workspaceF);
+        if (appSettingsF != null) ft.hide(appSettingsF);
         if (detailF != null) ft.remove(detailF);
         ft.commit();
 

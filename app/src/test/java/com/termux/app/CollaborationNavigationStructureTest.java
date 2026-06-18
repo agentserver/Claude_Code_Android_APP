@@ -43,6 +43,7 @@ public class CollaborationNavigationStructureTest {
         Assert.assertNotNull(findById(doc, "collaboration_empty_slaves"));
         Assert.assertNotNull(findById(doc, "btn_collaboration_create_slave"));
         Assert.assertNotNull(findById(doc, "btn_collaboration_refresh_slaves"));
+        Assert.assertNull(findById(doc, "btn_collaboration_clean_remote_offline"));
         Assert.assertNotNull(findById(doc, "btn_collaboration_agentserver_optional"));
         Assert.assertNull(findById(doc, "collaboration_loom_card"));
         Assert.assertNull(findById(doc, "collaboration_update_area"));
@@ -206,7 +207,6 @@ public class CollaborationNavigationStructureTest {
         Document doc = parseXml("src/main/res/layout/fragment_collaboration.xml");
         Element runtimeCard = findById(doc, "collaboration_runtime_card");
         Element providerRow = findById(doc, "collaboration_provider_card");
-        Element localAgentStatus = findById(doc, "collaboration_local_agent_status");
         Element slaveMachine = findById(doc, "collaboration_slave_machine");
         Element emptySlaves = findById(doc, "collaboration_empty_slaves");
         Element slaveList = findById(doc, "collaboration_slave_list");
@@ -214,15 +214,33 @@ public class CollaborationNavigationStructureTest {
 
         Assert.assertNotEquals("true", runtimeCard.getAttribute("android:clickable"));
         Assert.assertNotEquals("true", providerRow.getAttribute("android:clickable"));
-        Assert.assertNotEquals("true", localAgentStatus.getAttribute("android:clickable"));
         Assert.assertNotEquals("true", slaveMachine.getAttribute("android:clickable"));
         Assert.assertNotEquals("true", emptySlaves.getAttribute("android:clickable"));
+        Assert.assertNotNull(slaveList);
         Assert.assertNotEquals("true", slaveList.getAttribute("android:clickable"));
         Assert.assertFalse(source.contains("R.id.collaboration_runtime_card).setOnClickListener"));
         Assert.assertFalse(source.contains("R.id.collaboration_provider_card)\n            .setOnClickListener"));
         Assert.assertTrue(source.contains("R.id.btn_collaboration_switch_provider"));
         Assert.assertTrue(source.contains("R.id.btn_collaboration_create_slave"));
         Assert.assertTrue(source.contains("R.id.btn_collaboration_refresh_slaves"));
+    }
+
+    @Test
+    public void collaborationRuntimeKeepsLoomEntryAboveSlaveCreationAndEmptyStateInSlaveListSection() throws Exception {
+        String xml = readSource("src/main/res/layout/fragment_collaboration.xml");
+
+        int providerRow = xml.indexOf("collaboration_provider_card");
+        int loomSummary = xml.indexOf("collaboration_loom_summary");
+        int createSlaveButton = xml.indexOf("btn_collaboration_create_slave");
+        int emptySlaves = xml.indexOf("collaboration_empty_slaves");
+        int slaveList = xml.indexOf("collaboration_slave_list\"");
+
+        Assert.assertTrue(providerRow >= 0);
+        Assert.assertTrue(loomSummary > providerRow);
+        Assert.assertTrue(createSlaveButton >= 0);
+        Assert.assertTrue(createSlaveButton > loomSummary);
+        Assert.assertTrue(emptySlaves > createSlaveButton);
+        Assert.assertTrue(slaveList > emptySlaves);
     }
 
     @Test
@@ -236,8 +254,23 @@ public class CollaborationNavigationStructureTest {
         Assert.assertFalse(source.contains("All-in-one"));
         Assert.assertTrue(xml.contains("本机 Slave 列表"));
         Assert.assertTrue(xml.contains("尚未创建 Slave"));
-        Assert.assertTrue(source.contains("本机 Slave · 新建默认使用"));
-        Assert.assertTrue(source.contains("\"Slave：\" + slave.displayName"));
+        Assert.assertFalse(source.contains("collaboration_local_agent_status"));
+        Assert.assertTrue(source.contains("title.setText(\"Slave：\" + slave.displayName)"));
+        Assert.assertFalse(source.contains("\"Slave：\" + slave.displayName + \" · \""));
+    }
+
+    @Test
+    public void collaborationSlaveListUsesIconAndSignalStatus() throws Exception {
+        Document doc = parseXml("src/main/res/layout/fragment_collaboration.xml");
+        Element listIcon = findById(doc, "collaboration_slave_list_icon");
+        String source = readSource("src/main/java/com/termux/app/CollaborationFragment.java");
+
+        Assert.assertNotNull(listIcon);
+        Assert.assertEquals("@drawable/ic_list_24", listIcon.getAttribute("android:src"));
+        Assert.assertTrue(source.contains("slaveStatusDotRes"));
+        Assert.assertTrue(source.contains("bg_status_dot_connected"));
+        Assert.assertTrue(source.contains("statusText.setText(slaveStatusLabel(slave.status))"));
+        Assert.assertFalse(source.contains("title.setText(\"Slave：\" + slave.displayName + \" · \""));
     }
 
     @Test
@@ -291,6 +324,7 @@ public class CollaborationNavigationStructureTest {
         Assert.assertTrue(source.contains("__LOOM_SLAVE_ERROR__="));
         Assert.assertTrue(source.contains("LoomCommandBuilder.startManagedSlaveRuntimeScript"));
         Assert.assertTrue(source.contains("LoomCommandBuilder.stopManagedSlaveScript"));
+        Assert.assertTrue(source.contains("LoomCommandBuilder.deleteManagedSlaveScript"));
         Assert.assertTrue(source.contains("registry.delete(slave.id)"));
         Assert.assertFalse(source.contains("R.id.btn_collaboration_start_role"));
         Assert.assertFalse(source.contains("R.id.btn_collaboration_stop_role"));
@@ -328,6 +362,17 @@ public class CollaborationNavigationStructureTest {
         Assert.assertTrue(source.contains("dismissAuthDialogIfNoAuthRequired(slaves)"));
         Assert.assertTrue(source.contains("LoomSlaveStatus.AUTH_REQUIRED.equals(slave.status)"));
         Assert.assertTrue(source.contains("dismissAuthDialog();"));
+    }
+
+    @Test
+    public void collaborationDoesNotExposeManualRemoteCleanupPrompts() throws Exception {
+        Document doc = parseXml("src/main/res/layout/fragment_collaboration.xml");
+        String source = readSource("src/main/java/com/termux/app/CollaborationFragment.java");
+
+        Assert.assertNull(findById(doc, "btn_collaboration_clean_remote_offline"));
+        Assert.assertFalse(source.contains("cleanRemoteOfflineAgentRecords"));
+        Assert.assertFalse(source.contains("当前连接方式不能直接删除远端离线记录"));
+        Assert.assertFalse(source.contains("本机会过滤同名离线项"));
     }
 
     @Test

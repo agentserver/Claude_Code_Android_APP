@@ -58,6 +58,7 @@ public class AndroidStatusTool implements McpTool {
 
         JSONArray tools = new JSONArray();
         tools.put("android.get_status");
+        tools.put("loom.list_local_slaves");
         tools.put("adb.get_status");
         tools.put("camera.take_photo");
         tools.put("file.check_exists");

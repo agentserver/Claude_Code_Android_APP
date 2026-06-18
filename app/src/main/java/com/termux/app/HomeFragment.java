@@ -233,8 +233,10 @@ public class HomeFragment extends Fragment {
         mSessionTitle.setOnClickListener(v -> showProviderDialog());
         View homeSettingsButton = view.findViewById(R.id.btn_home_settings);
         if (homeSettingsButton != null) {
-            homeSettingsButton.setOnClickListener(v -> startActivity(new Intent(
-                requireContext(), com.termux.app.activities.SettingsActivity.class)));
+            homeSettingsButton.setOnClickListener(v -> {
+                TermuxActivity a = act();
+                if (a != null) a.navigateBackToSettingsHub();
+            });
         }
         updateSessionTitle(null);
 

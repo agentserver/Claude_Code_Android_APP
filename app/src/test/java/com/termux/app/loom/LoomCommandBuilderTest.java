@@ -79,6 +79,9 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(script.contains("driver_credentials_valid"));
         Assert.assertTrue(script.contains("/api/agent/whoami"));
         Assert.assertTrue(script.contains("Driver credentials invalid; registering again"));
+        Assert.assertTrue(script.contains("mv \"$_driver_cfg\" \"$_driver_cfg.invalid."));
+        Assert.assertTrue(script.contains("base64 -d > \"$_driver_cfg\""));
+        Assert.assertTrue(script.contains("chmod 600 \"$_driver_cfg\""));
         Assert.assertTrue(script.contains("/home/codex/loom-driver/driver-agent register"));
         Assert.assertTrue(script.contains("tee -a \"$HOME/loom-driver-bind.log\""));
     }
@@ -206,6 +209,32 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(start.contains("tail -n 8"));
         Assert.assertTrue(stop.contains("slave-agent /home/codex/\\.loom/slaves/slave-id/config\\.yaml"));
         Assert.assertTrue(stop.contains("slave: stopped"));
+    }
+
+    @Test
+    public void deleteManagedSlaveScriptStopsProcessAndRemovesRuntimeDirectory() {
+        LoomSettings settings = LoomSettings.defaults()
+            .withAgentProvider(AssistantProvider.CODEX);
+        LoomSlave slave = new LoomSlave(
+            "slave-id",
+            "worker",
+            "BeamPro-worker",
+            "/home/codex/repo",
+            "/home/codex/.loom/slaves/slave-id/config.yaml",
+            "/home/codex/.loom/slaves/slave-id/logs/slave.log",
+            AssistantProvider.CODEX.id,
+            LoomSlaveStatus.STOPPED,
+            0,
+            "",
+            "",
+            1,
+            1);
+
+        String script = LoomCommandBuilder.deleteManagedSlaveScript(settings, slave);
+
+        Assert.assertTrue(script.contains("slave-agent /home/codex/\\.loom/slaves/slave-id/config\\.yaml"));
+        Assert.assertTrue(script.contains("rm -rf '/home/codex/.loom/slaves/slave-id'"));
+        Assert.assertTrue(script.contains("slave: deleted local runtime"));
     }
 
     @Test
@@ -372,7 +401,10 @@ public class LoomCommandBuilderTest {
         Assert.assertTrue(script.contains("/home/codex/.loom/slave-local/config.yaml"));
         Assert.assertTrue(script.contains("/home/codex/.codex/config.toml"));
         Assert.assertTrue(script.contains("[mcp_servers.loom-driver]"));
-        Assert.assertTrue(script.contains("command = \"/home/codex/loom-driver/driver-agent\""));
+        Assert.assertTrue(script.contains("driver-agent-mcp-wrapper.py"));
+        Assert.assertTrue(script.contains("command = \"/home/codex/loom-driver/driver-agent-mcp-wrapper.py\""));
+        Assert.assertTrue(script.contains("\"/home/codex/loom-driver/driver-agent\""));
+        Assert.assertTrue(script.contains("\"/home/codex/.loom/android-local-slaves.json\""));
         Assert.assertFalse(script.contains("/home/claude/loom-driver/config.yaml"));
     }
 

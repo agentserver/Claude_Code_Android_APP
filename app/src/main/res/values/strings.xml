@@ -140,6 +140,7 @@
 
     <!-- Termux Settings -->
     <string name="title_activity_termux_settings">应用设置</string>
+    <string name="app_settings_subtitle">终端偏好、调试、插件管理</string>
 
     <!-- Termux App Preferences -->
     <string name="termux_preferences_title">终端设置</string>

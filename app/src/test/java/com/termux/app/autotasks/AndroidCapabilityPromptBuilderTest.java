@@ -36,6 +36,15 @@ public class AndroidCapabilityPromptBuilderTest {
     }
 
     @Test
+    public void providerInstructionsDoNotAddManualLoomCleanupPrompts() {
+        String claude = AndroidCapabilityPromptBuilder.buildClaudeInstructions();
+        String codex = AndroidCapabilityPromptBuilder.buildCodexInstructions();
+
+        assertFalse(claude.contains("先提示用户在 App 协作页清理/过滤"));
+        assertFalse(codex.contains("先提示用户在 App 协作页清理/过滤"));
+    }
+
+    @Test
     public void codexAndroidSkillDescribesMcpTools() {
         String skill = AndroidCapabilityPromptBuilder.buildCodexAndroidSkill();
 

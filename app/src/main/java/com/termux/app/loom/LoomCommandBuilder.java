@@ -112,6 +112,7 @@ public final class LoomCommandBuilder {
     public static String bindDriverIfNeededScript(LoomSettings settings) {
         LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
         Paths p = paths(safeSettings);
+        String driver = b64(LoomConfigRenderer.renderDriverConfig(safeSettings, p.driverProject, p.driverHome));
         String command = ""
             + driverConfigIdentityFunctions()
             + "_driver_cfg=" + shellQuote(p.driverConfig) + "\n"
@@ -123,6 +124,9 @@ public final class LoomCommandBuilder {
             + "    _reuse_driver=1\n"
             + "  else\n"
             + "    echo '[*] Driver credentials invalid; registering again'\n"
+            + "    mv \"$_driver_cfg\" \"$_driver_cfg.invalid.$(date +%Y%m%d%H%M%S)\"\n"
+            + "    printf '%s' '" + driver + "' | base64 -d > \"$_driver_cfg\"\n"
+            + "    chmod 600 \"$_driver_cfg\"\n"
             + "  fi\n"
             + "fi\n"
             + "if [ \"$_reuse_driver\" = 1 ]; then\n"
@@ -151,12 +155,14 @@ public final class LoomCommandBuilder {
         String slave = b64(LoomConfigRenderer.renderSlaveConfig(safeSettings, p.slaveHome, 1, "aarch64", 1));
         String mcpJson = b64(driverMcpJson(p));
         String codexMcpToml = codexMcpToml(p);
+        String mcpWrapper = b64(driverMcpWrapperPy());
         String command = ""
             + "mkdir -p " + p.observerHome + " " + p.driverHome + " " + p.slaveHome + " "
                 + p.driverProject + "/logs " + p.loomSkillsDir + " " + p.loomMcpParent + "\n"
             + "printf '%s' '" + observer + "' | base64 -d > " + p.observerConfig + "\n"
             + driverConfigWriteCommand(p, driver, resetDriverConfig, safeSettings.agentServerUrl)
             + "printf '%s' '" + slave + "' | base64 -d > " + p.slaveConfig + "\n"
+            + "printf '%s' '" + mcpWrapper + "' | base64 -d > " + p.driverMcpWrapper + "\n"
             + "if [ " + shellQuote(p.provider.id) + " = 'claude' ]; then\n"
             + "  printf '%s' '" + mcpJson + "' | base64 -d > " + p.loomMcpConfig + "\n"
             + "fi\n"
@@ -171,6 +177,7 @@ public final class LoomCommandBuilder {
             + "fi\n"
             + "cp /usr/local/bin/driver-agent " + p.driverProject + "/driver-agent\n"
             + "chmod +x " + p.driverProject + "/driver-agent\n"
+            + "chmod +x " + p.driverMcpWrapper + "\n"
             + "chmod 600 " + p.observerConfig + " " + p.driverConfig + " " + p.slaveConfig + "\n"
             + "echo '[*] Loom configs written'\n"
             + "echo '[*] Driver project is ready at " + p.driverProject + "'";
@@ -415,6 +422,30 @@ public final class LoomCommandBuilder {
             + proot(command, p.user) + "\n";
     }
 
+    public static String deleteManagedSlaveScript(LoomSettings settings, LoomSlave slave) {
+        LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
+        LoomSlave safeSlave = requireManagedSlave(slave);
+        Paths p = paths(safeSettings);
+        String process = managedSlaveProcess(safeSlave);
+        String rootDir = managedSlaveRootDir(safeSlave);
+        String command = ""
+            + "set +e\n"
+            + loomPidsFunction()
+            + "pids=$(loom_pids '" + process + "')\n"
+            + "if [ -n \"$pids\" ]; then\n"
+            + "  kill $pids 2>/dev/null || true\n"
+            + "  echo 'slave: stopped'\n"
+            + "else\n"
+            + "  echo 'slave: not running'\n"
+            + "fi\n"
+            + "rm -rf " + shellQuote(rootDir) + "\n"
+            + "echo 'slave: deleted local runtime'\n";
+        return header()
+            + "command -v proot-distro\n"
+            + readableCommand("rm -rf " + shellQuote(rootDir))
+            + proot(command, p.user) + "\n";
+    }
+
     private static String waitForObserverScript(LoomSettings settings) {
         LoomSettings safeSettings = settings == null ? LoomSettings.defaults() : settings;
         Paths p = paths(safeSettings);
@@ -520,8 +551,9 @@ public final class LoomCommandBuilder {
         return "{\n"
             + "  \"mcpServers\": {\n"
             + "    \"loom-driver\": {\n"
-            + "      \"command\": \"" + p.driverProject + "/driver-agent\",\n"
-            + "      \"args\": [\"serve-mcp\", \"--config\", \"" + p.driverConfig + "\"]\n"
+            + "      \"command\": \"" + p.driverMcpWrapper + "\",\n"
+            + "      \"args\": [\"" + p.driverProject + "/driver-agent\", \"serve-mcp\", \"--config\", \""
+                + p.driverConfig + "\", \"--local-slaves\", \"" + p.localSlaveSnapshot + "\"]\n"
             + "    }\n"
             + "  }\n"
             + "}\n";
@@ -529,8 +561,156 @@ public final class LoomCommandBuilder {
 
     private static String codexMcpToml(Paths p) {
         return "\n[mcp_servers.loom-driver]\n"
-            + "command = \"" + p.driverProject + "/driver-agent\"\n"
-            + "args = [\"serve-mcp\", \"--config\", \"" + p.driverConfig + "\"]\n";
+            + "command = \"" + p.driverMcpWrapper + "\"\n"
+            + "args = [\"" + p.driverProject + "/driver-agent\", \"serve-mcp\", \"--config\", \""
+                + p.driverConfig + "\", \"--local-slaves\", \"" + p.localSlaveSnapshot + "\"]\n";
+    }
+
+    static String driverMcpWrapperPy() {
+        return "#!/usr/bin/env python3\n"
+            + "import json\n"
+            + "import subprocess\n"
+            + "import sys\n"
+            + "\n"
+            + "def split_args(argv):\n"
+            + "    child = []\n"
+            + "    local_slaves = ''\n"
+            + "    i = 0\n"
+            + "    while i < len(argv):\n"
+            + "        if argv[i] == '--local-slaves' and i + 1 < len(argv):\n"
+            + "            local_slaves = argv[i + 1]\n"
+            + "            i += 2\n"
+            + "        else:\n"
+            + "            child.append(argv[i])\n"
+            + "            i += 1\n"
+            + "    return child, local_slaves\n"
+            + "\n"
+            + "def load_snapshot(path):\n"
+            + "    empty = {'machine': '', 'names': set(), 'loaded': False}\n"
+            + "    if not path:\n"
+            + "        return empty\n"
+            + "    try:\n"
+            + "        with open(path, 'r', encoding='utf-8') as fh:\n"
+            + "            data = json.load(fh)\n"
+            + "    except Exception:\n"
+            + "        return empty\n"
+            + "    names = set()\n"
+            + "    for slave in data.get('slaves') or []:\n"
+            + "        name = str(slave.get('display_name') or '').strip()\n"
+            + "        if name:\n"
+            + "            names.add(name)\n"
+            + "    return {\n"
+            + "        'machine': str(data.get('machine_name') or '').strip(),\n"
+            + "        'names': names,\n"
+            + "        'loaded': True,\n"
+            + "    }\n"
+            + "\n"
+            + "def is_local_display(display, snapshot):\n"
+            + "    machine = snapshot.get('machine') or ''\n"
+            + "    return bool(machine and display.startswith(machine + '-'))\n"
+            + "\n"
+            + "def status_score(agent):\n"
+            + "    status = str(agent.get('status') or '').lower()\n"
+            + "    if status in ('available', 'running'):\n"
+            + "        return 3\n"
+            + "    if status in ('auth_required', 'starting'):\n"
+            + "        return 2\n"
+            + "    return 1\n"
+            + "\n"
+            + "def filter_agent_list(agents, snapshot):\n"
+            + "    if not snapshot.get('loaded'):\n"
+            + "        return agents\n"
+            + "    out = []\n"
+            + "    seen = {}\n"
+            + "    names = snapshot.get('names') or set()\n"
+            + "    for agent in agents:\n"
+            + "        if not isinstance(agent, dict):\n"
+            + "            out.append(agent)\n"
+            + "            continue\n"
+            + "        display = str(agent.get('display_name') or '').strip()\n"
+            + "        if is_local_display(display, snapshot) and display not in names:\n"
+            + "            continue\n"
+            + "        key = display.lower() if display else str(agent.get('agent_id') or '')\n"
+            + "        if key in seen:\n"
+            + "            idx = seen[key]\n"
+            + "            if status_score(agent) > status_score(out[idx]):\n"
+            + "                out[idx] = agent\n"
+            + "        else:\n"
+            + "            seen[key] = len(out)\n"
+            + "            out.append(agent)\n"
+            + "    return out\n"
+            + "\n"
+            + "def filter_text(text, snapshot):\n"
+            + "    try:\n"
+            + "        data = json.loads(text)\n"
+            + "    except Exception:\n"
+            + "        return text\n"
+            + "    if isinstance(data, list):\n"
+            + "        return json.dumps(filter_agent_list(data, snapshot), ensure_ascii=False)\n"
+            + "    return text\n"
+            + "\n"
+            + "def filter_description(text, snapshot):\n"
+            + "    machine = snapshot.get('machine') or ''\n"
+            + "    if not snapshot.get('loaded') or not machine:\n"
+            + "        return text\n"
+            + "    names = snapshot.get('names') or set()\n"
+            + "    lines = []\n"
+            + "    for line in text.splitlines():\n"
+            + "        stripped = line.strip()\n"
+            + "        if stripped.startswith('- ') and (machine + '-') in stripped:\n"
+            + "            display = stripped[2:].split(' (', 1)[0].strip()\n"
+            + "            if display not in names:\n"
+            + "                continue\n"
+            + "        lines.append(line)\n"
+            + "    return '\\n'.join(lines)\n"
+            + "\n"
+            + "def filter_response(line, snapshot):\n"
+            + "    try:\n"
+            + "        msg = json.loads(line)\n"
+            + "    except Exception:\n"
+            + "        return line\n"
+            + "    result = msg.get('result')\n"
+            + "    if isinstance(result, dict):\n"
+            + "        content = result.get('content')\n"
+            + "        if isinstance(content, list):\n"
+            + "            for item in content:\n"
+            + "                if isinstance(item, dict) and isinstance(item.get('text'), str):\n"
+            + "                    item['text'] = filter_text(item['text'], snapshot)\n"
+            + "        tools = result.get('tools')\n"
+            + "        if isinstance(tools, list):\n"
+            + "            for tool in tools:\n"
+            + "                if isinstance(tool, dict) and isinstance(tool.get('description'), str):\n"
+            + "                    tool['description'] = filter_description(tool['description'], snapshot)\n"
+            + "    return json.dumps(msg, ensure_ascii=False, separators=(',', ':')) + '\\n'\n"
+            + "\n"
+            + "child_args, local_slaves = split_args(sys.argv[1:])\n"
+            + "if not child_args:\n"
+            + "    sys.exit(2)\n"
+            + "proc = subprocess.Popen(child_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,\n"
+            + "                        stderr=sys.stderr, text=True, bufsize=1)\n"
+            + "for line in sys.stdin:\n"
+            + "    try:\n"
+            + "        proc.stdin.write(line)\n"
+            + "        proc.stdin.flush()\n"
+            + "    except BrokenPipeError:\n"
+            + "        break\n"
+            + "    try:\n"
+            + "        req = json.loads(line)\n"
+            + "    except Exception:\n"
+            + "        req = {}\n"
+            + "    if 'id' not in req:\n"
+            + "        continue\n"
+            + "    response = proc.stdout.readline()\n"
+            + "    if not response:\n"
+            + "        break\n"
+            + "    sys.stdout.write(filter_response(response, load_snapshot(local_slaves)))\n"
+            + "    sys.stdout.flush()\n"
+            + "try:\n"
+            + "    if proc.stdin:\n"
+            + "        proc.stdin.close()\n"
+            + "except Exception:\n"
+            + "    pass\n"
+            + "sys.exit(proc.wait())\n";
     }
 
     private static String driverConfigWriteCommand(
@@ -672,6 +852,20 @@ public final class LoomCommandBuilder {
         return slave;
     }
 
+    private static LoomSlave requireManagedSlave(LoomSlave slave) {
+        LoomSlave safeSlave = requireSlave(slave);
+        managedSlaveRootDir(safeSlave);
+        return safeSlave;
+    }
+
+    private static String managedSlaveRootDir(LoomSlave slave) {
+        String rootDir = parentDir(slave.configPath);
+        if (!rootDir.contains("/.loom/slaves/")) {
+            throw new IllegalArgumentException("managed slave config must live under .loom/slaves");
+        }
+        return rootDir;
+    }
+
     private static final class Paths {
         final String user;
         final AssistantProvider provider;
@@ -682,10 +876,12 @@ public final class LoomCommandBuilder {
         final String slaveHome;
         final String observerConfig;
         final String driverConfig;
+        final String driverMcpWrapper;
         final String slaveConfig;
         final String loomMcpConfig;
         final String loomMcpParent;
         final String loomSkillsDir;
+        final String localSlaveSnapshot;
 
         Paths(AssistantProvider provider) {
             ProviderProfile profile = ProviderProfile.forProvider(provider);
@@ -698,11 +894,13 @@ public final class LoomCommandBuilder {
             slaveHome = profile.home + "/.loom/slave-local";
             observerConfig = observerHome + "/observer.yaml";
             driverConfig = profile.driverConfigPath;
+            driverMcpWrapper = driverProject + "/driver-agent-mcp-wrapper.py";
             slaveConfig = slaveHome + "/config.yaml";
             loomMcpConfig = profile.loomMcpConfigPath;
             int slash = loomMcpConfig.lastIndexOf('/');
             loomMcpParent = slash > 0 ? loomMcpConfig.substring(0, slash) : profile.home;
             loomSkillsDir = profile.loomSkillsDir;
+            localSlaveSnapshot = profile.home + "/" + LoomLocalSlaveRuntimeStore.SNAPSHOT_PATH;
         }
     }
 }

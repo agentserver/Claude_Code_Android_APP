@@ -5,12 +5,14 @@ import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
+import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
+import com.termux.app.AppSettingsFragment;
 import com.termux.app.activities.ApiToolsActivity;
 import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
 
@@ -30,7 +32,12 @@ public class TermuxAPIPreferencesFragment extends PreferenceFragmentCompat {
         Preference apiToolsPreference = findPreference("termux_api_tools");
         if (apiToolsPreference != null) {
             apiToolsPreference.setOnPreferenceClickListener(preference -> {
-                startActivity(new Intent(context, ApiToolsActivity.class));
+                Fragment parent = getParentFragment();
+                if (parent instanceof AppSettingsFragment) {
+                    ((AppSettingsFragment) parent).showApiToolsPage();
+                } else {
+                    startActivity(new Intent(context, ApiToolsActivity.class));
+                }
                 return true;
             });
         }

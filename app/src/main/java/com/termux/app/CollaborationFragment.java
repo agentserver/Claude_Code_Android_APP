@@ -29,8 +29,10 @@ import com.termux.R;
 import com.termux.app.collab.CollaborationConnectionState;
 import com.termux.app.loom.LoomCommandBuilder;
 import com.termux.app.loom.LoomDriverConfigIdentity;
+import com.termux.app.loom.LoomLocalSlaveRuntimeStore;
 import com.termux.app.loom.LoomSettings;
 import com.termux.app.loom.LoomSlave;
+import com.termux.app.loom.LoomSlaveListPolicy;
 import com.termux.app.loom.LoomSlaveRegistry;
 import com.termux.app.loom.LoomSlaveStatus;
 
@@ -68,7 +70,6 @@ public class CollaborationFragment extends Fragment {
     private TextView mWorkspaceSummary;
     private TextView mLoomSummary;
     private TextView mAndroidCapabilitiesSummary;
-    private TextView mLocalAgentStatus;
     private TextView mSlaveMachineText;
     private TextView mEmptySlavesText;
     private LinearLayout mSlaveList;
@@ -102,7 +103,6 @@ public class CollaborationFragment extends Fragment {
         mWorkspaceSummary = view.findViewById(R.id.collaboration_workspace_summary);
         mLoomSummary = view.findViewById(R.id.collaboration_loom_summary);
         mAndroidCapabilitiesSummary = view.findViewById(R.id.collaboration_android_capabilities_summary);
-        mLocalAgentStatus = view.findViewById(R.id.collaboration_local_agent_status);
         mSlaveMachineText = view.findViewById(R.id.collaboration_slave_machine);
         mEmptySlavesText = view.findViewById(R.id.collaboration_empty_slaves);
         mSlaveList = view.findViewById(R.id.collaboration_slave_list);
@@ -202,7 +202,9 @@ public class CollaborationFragment extends Fragment {
         if (mSlaveMachineText != null) {
             mSlaveMachineText.setText("本机：" + mMachine.computerName);
         }
-        List<LoomSlave> slaves = registry.list();
+        List<LoomSlave> allSlaves = registry.list();
+        LoomLocalSlaveRuntimeStore.sync(requireContext(), mMachine.computerName, allSlaves);
+        List<LoomSlave> slaves = LoomSlaveListPolicy.visibleSlaves(allSlaves);
         dismissAuthDialogIfNoAuthRequired(slaves);
         renderSlaveList(slaves);
 
@@ -216,9 +218,6 @@ public class CollaborationFragment extends Fragment {
         if (mAndroidCapabilitiesSummary != null) {
             mAndroidCapabilitiesSummary.setText(
                 "管理应用/文件目录权限");
-        }
-        if (mLocalAgentStatus != null) {
-            mLocalAgentStatus.setText("本机 Slave · 新建默认使用 " + profile.displayName);
         }
     }
 
@@ -258,12 +257,41 @@ public class CollaborationFragment extends Fragment {
         rowParams.setMargins(0, 0, 0, dp(8));
         row.setLayoutParams(rowParams);
 
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.addView(header);
+
         TextView title = new TextView(context);
-        title.setText("Slave：" + slave.displayName + " · " + slaveStatusLabel(slave.status));
+        title.setText("Slave：" + slave.displayName);
         title.setTextColor(getResources().getColor(R.color.app_text_primary));
         title.setTextSize(14);
         title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        row.addView(title);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1);
+        title.setLayoutParams(titleParams);
+        header.addView(title);
+
+        LinearLayout status = new LinearLayout(context);
+        status.setOrientation(LinearLayout.HORIZONTAL);
+        status.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        status.setPadding(dp(8), dp(3), dp(8), dp(3));
+        status.setBackgroundResource(R.drawable.bg_status_chip);
+        header.addView(status);
+
+        View statusDot = new View(context);
+        statusDot.setBackgroundResource(slaveStatusDotRes(slave.status));
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(7), dp(7));
+        dotParams.setMargins(0, 0, dp(6), 0);
+        status.addView(statusDot, dotParams);
+
+        TextView statusText = new TextView(context);
+        statusText.setText(slaveStatusLabel(slave.status));
+        statusText.setTextColor(getResources().getColor(R.color.app_text_secondary));
+        statusText.setTextSize(12);
+        status.addView(statusText);
 
         TextView detail = new TextView(context);
         detail.setText(slave.folder + "\n" + ProviderProfile.forProvider(
@@ -310,15 +338,21 @@ public class CollaborationFragment extends Fragment {
         button.setLetterSpacing(0);
         button.setTextSize(12);
         button.setTextColor(getResources().getColor(colorRes));
+        button.setStrokeColor(android.content.res.ColorStateList.valueOf(
+            getResources().getColor(colorRes)));
+        button.setStrokeWidth(dp(1));
+        button.setCornerRadius(dp(8));
         button.setMinHeight(dp(36));
+        button.setMinWidth(0);
         button.setInsetTop(0);
         button.setInsetBottom(0);
+        button.setPadding(dp(6), 0, dp(6), 0);
         button.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             0,
-            dp(38),
+            dp(40),
             1);
-        params.setMargins(dp(2), 0, dp(2), 0);
+        params.setMargins(dp(3), 0, dp(3), 0);
         button.setLayoutParams(params);
         return button;
     }
@@ -410,7 +444,7 @@ public class CollaborationFragment extends Fragment {
             .setPositiveButton("删除", (dialog, which) -> {
                 LoomSettings settings = currentLoomSettings().withAgentProvider(
                     AssistantProvider.fromId(slave.providerId));
-                runManagedSlaveScript(slave, LoomCommandBuilder.stopManagedSlaveScript(settings, slave), "delete");
+                runManagedSlaveScript(slave, LoomCommandBuilder.deleteManagedSlaveScript(settings, slave), "delete");
             })
             .show();
     }
@@ -993,6 +1027,16 @@ public class CollaborationFragment extends Fragment {
         if (LoomSlaveStatus.PAUSED.equals(status)) return "已暂停";
         if (LoomSlaveStatus.ERROR.equals(status)) return "出错";
         return "已停止";
+    }
+
+    private int slaveStatusDotRes(String status) {
+        if (LoomSlaveStatus.RUNNING.equals(status)) return R.drawable.bg_status_dot_connected;
+        if (LoomSlaveStatus.STARTING.equals(status)
+                || LoomSlaveStatus.AUTH_REQUIRED.equals(status)) {
+            return R.drawable.bg_status_dot_warning;
+        }
+        if (LoomSlaveStatus.ERROR.equals(status)) return R.drawable.bg_status_dot_danger;
+        return R.drawable.bg_status_dot_idle;
     }
 
     private int parsePid(String value) {

@@ -1,6 +1,5 @@
 package com.termux.app;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,7 +10,6 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.termux.R;
-import com.termux.app.activities.SettingsActivity;
 
 /**
  * 设置导航页：作为底部 Tab "设置" 的入口，提供自动化与应用设置跳转。
@@ -46,7 +44,8 @@ public class SettingsHubFragment extends Fragment {
         });
 
         view.findViewById(R.id.settings_item_app_settings).setOnClickListener(v -> {
-            startActivity(new Intent(requireContext(), SettingsActivity.class));
+            TermuxActivity a = act();
+            if (a != null) a.showAppSettingsMode();
         });
     }
 

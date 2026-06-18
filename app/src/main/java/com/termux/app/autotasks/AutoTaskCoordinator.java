@@ -3,6 +3,8 @@ package com.termux.app.autotasks;
 import androidx.annotation.NonNull;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.loom.LoomLocalSlaveRuntimeStore;
+import com.termux.app.loom.LoomSlaveRegistry;
 import com.termux.app.mcp.AuditLogger;
 import com.termux.app.mcp.McpHttpServer;
 import com.termux.app.mcp.tools.AndroidStatusTool;
@@ -10,6 +12,7 @@ import com.termux.app.mcp.tools.CameraTool;
 import com.termux.app.mcp.tools.FileTool;
 import com.termux.app.mcp.tools.AppTool;
 import com.termux.app.mcp.tools.AdbTool;
+import com.termux.app.mcp.tools.LoomLocalSlavesTool;
 import com.termux.app.mcp.tools.ScreenCaptureTool;
 import com.termux.app.mcp.tools.UiTool;
 import com.termux.app.mcp.tools.UiTreeTool;
@@ -49,6 +52,7 @@ public class AutoTaskCoordinator {
         AuditLogger audit = new AuditLogger(termuxHome);
         mMcpHttpServer = new McpHttpServer(activity, audit);
         mMcpHttpServer.registerTool(new AndroidStatusTool());
+        mMcpHttpServer.registerTool(new LoomLocalSlavesTool());
         mMcpHttpServer.registerTool(new CameraTool());
         mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.CHECK_EXISTS));
         mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.LIST));
@@ -70,6 +74,9 @@ public class AutoTaskCoordinator {
         mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.KEYEVENT));
         mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.CURRENT_ACTIVITY));
         mMcpHttpServer.start();
+        LoomSlaveRegistry registry = LoomSlaveRegistry.forContext(activity);
+        LoomSlaveRegistry.Machine machine = registry.machineOrDefault(android.os.Build.MODEL);
+        LoomLocalSlaveRuntimeStore.sync(activity, machine.computerName, registry.list());
         // 后台生成 capabilities.json，供 Ubuntu 里的 Claude Code 读取设备能力快照
         new CapabilitiesManager(activity).generateAsync();
     }
