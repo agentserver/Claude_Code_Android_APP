@@ -1,0 +1,129 @@
+package com.portalagent.setup;
+
+import androidx.annotation.NonNull;
+
+import com.termux.app.TermuxActivity;
+import com.portalagent.loom.LoomLocalSlaveRuntimeStore;
+import com.portalagent.loom.LoomSlaveRegistry;
+import com.portalagent.mcp.AuditLogger;
+import com.portalagent.mcp.McpHttpServer;
+import com.portalagent.mcp.tools.AndroidStatusTool;
+import com.portalagent.mcp.tools.CameraTool;
+import com.portalagent.mcp.tools.FileTool;
+import com.portalagent.mcp.tools.AppTool;
+import com.portalagent.mcp.tools.AdbTool;
+import com.portalagent.mcp.tools.LoomLocalSlavesTool;
+import com.portalagent.mcp.tools.ScreenCaptureTool;
+import com.portalagent.mcp.tools.UiTool;
+import com.portalagent.mcp.tools.UiTreeTool;
+
+public class AutoTaskCoordinator {
+
+    private final ApiSelfCheckManager mApiSelfCheckManager;
+    private final AutoUbuntuManager mAutoUbuntuManager;
+    private final ApiHttpBridgeServer mApiHttpBridgeServer;
+    private final McpHttpServer mMcpHttpServer;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final AutoClaudeManager mAutoClaudeManager;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final AutoCodexManager mAutoCodexManager;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final AutoAgentServerManager mAutoAgentServerManager;
+    @SuppressWarnings("FieldCanBeLocal")
+    private final AutoLoomManager mAutoLoomManager;
+    private boolean mEnabled = true;
+
+    public AutoTaskCoordinator(@NonNull TermuxActivity activity) {
+        // AutoClaudeManager / addon managers 先初始化：后台写 inner 脚本，
+        // Ubuntu 安装需要几分钟，有充足准备时间
+        mAutoClaudeManager = new AutoClaudeManager(activity);
+        mAutoCodexManager = new AutoCodexManager(activity);
+        mAutoAgentServerManager = new AutoAgentServerManager(activity);
+        mAutoLoomManager = new AutoLoomManager(activity);
+        mApiSelfCheckManager = new ApiSelfCheckManager(activity);
+        mAutoUbuntuManager = new AutoUbuntuManager(activity);
+        mAutoUbuntuManager.setAgentServerManager(mAutoAgentServerManager);
+        mAutoUbuntuManager.setLoomManager(mAutoLoomManager);
+        // 旧 HTTP API 桥（只读，保留向后兼容）
+        mApiHttpBridgeServer = new ApiHttpBridgeServer(activity);
+        mApiHttpBridgeServer.start();
+        // MCP Server：将 Android 原生能力封装为 Claude Code 可调用的 MCP 工具
+        String termuxHome = activity.getFilesDir().getParent() + "/home";
+        AuditLogger audit = new AuditLogger(termuxHome);
+        mMcpHttpServer = new McpHttpServer(activity, audit);
+        mMcpHttpServer.registerTool(new AndroidStatusTool());
+        mMcpHttpServer.registerTool(new LoomLocalSlavesTool());
+        mMcpHttpServer.registerTool(new CameraTool());
+        mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.CHECK_EXISTS));
+        mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.LIST));
+        mMcpHttpServer.registerTool(new FileTool(FileTool.Kind.READ));
+        mMcpHttpServer.registerTool(new ScreenCaptureTool());
+        // Phase 4: UI control via AccessibilityService
+        mMcpHttpServer.registerTool(new UiTool(UiTool.Kind.TAP));
+        mMcpHttpServer.registerTool(new UiTool(UiTool.Kind.SWIPE));
+        mMcpHttpServer.registerTool(new UiTool(UiTool.Kind.CLICK_TEXT));
+        mMcpHttpServer.registerTool(new UiTool(UiTool.Kind.INPUT_TEXT));
+        mMcpHttpServer.registerTool(new UiTreeTool());
+        mMcpHttpServer.registerTool(new AppTool(AppTool.Kind.OPEN));
+        mMcpHttpServer.registerTool(new AppTool(AppTool.Kind.GET_ACTIVITY));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.GET_STATUS));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.SCREENSHOT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.TAP));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.SWIPE));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.INPUT_TEXT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.KEYEVENT));
+        mMcpHttpServer.registerTool(new AdbTool(AdbTool.Kind.CURRENT_ACTIVITY));
+        mMcpHttpServer.start();
+        LoomSlaveRegistry registry = LoomSlaveRegistry.forContext(activity);
+        LoomSlaveRegistry.Machine machine = registry.machineOrDefault(android.os.Build.MODEL);
+        LoomLocalSlaveRuntimeStore.sync(activity, machine.computerName, registry.list());
+        // 后台生成 capabilities.json，供 Ubuntu 里的 Claude Code 读取设备能力快照
+        new CapabilitiesManager(activity).generateAsync();
+    }
+
+    public void setEnabled(boolean enabled) {
+        mEnabled = enabled;
+        mApiSelfCheckManager.setEnabled(enabled);
+        mAutoUbuntuManager.setEnabled(enabled);
+    }
+
+    public void setApiSelfCheckEnabled(boolean enabled) {
+        mApiSelfCheckManager.setEnabled(enabled);
+    }
+
+    public void setAutoUbuntuEnabled(boolean enabled) {
+        mAutoUbuntuManager.setEnabled(enabled);
+    }
+
+    public void init() {
+        if (!mEnabled) return;
+        mApiSelfCheckManager.initViews();
+    }
+
+    public void onStart() {
+        if (!mEnabled) return;
+        mApiSelfCheckManager.start();
+    }
+
+    public void onResume() {
+        if (!mEnabled) return;
+        mAutoUbuntuManager.maybeAutoLaunchUbuntu();
+    }
+
+    public void onSessionReady() {
+        if (!mEnabled) return;
+        mApiSelfCheckManager.tryPrintPending();
+        mAutoUbuntuManager.maybeAutoLaunchUbuntu();
+    }
+
+    public void requestEnvironmentRepair() {
+        if (!mEnabled) return;
+        mAutoUbuntuManager.requestEnvironmentRepair();
+    }
+
+    public void onDestroy() {
+        mApiSelfCheckManager.shutdown();
+        mApiHttpBridgeServer.stop();
+        mMcpHttpServer.stop();
+    }
+}

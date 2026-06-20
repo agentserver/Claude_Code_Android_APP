@@ -1,5 +1,18 @@
 package com.termux.app;
 
+import com.portalagent.agentserver.AgentServerFragment;
+import com.portalagent.automation.ui.AutomationSettingsFragment;
+import com.portalagent.keys.ApiKeyFragment;
+import com.portalagent.provider.AssistantProvider;
+import com.portalagent.provider.ProviderEnvironmentWriter;
+import com.portalagent.settings.AppSettingsFragment;
+import com.portalagent.settings.SettingsHubFragment;
+import com.portalagent.settings.WorkspaceAccessSettingsFragment;
+import com.portalagent.tasks.AgentTaskDetailFragment;
+import com.portalagent.ui.collaboration.CollaborationFragment;
+import com.portalagent.ui.collaboration.LoomFragment;
+import com.portalagent.ui.home.HomeFragment;
+import com.portalagent.ui.status.FloatingStatusService;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
@@ -30,8 +43,8 @@ import android.media.projection.MediaProjectionManager;
 
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
-import com.termux.app.mcp.ScreenCaptureService;
-import com.termux.app.autotasks.AutoTaskCoordinator;
+import com.portalagent.mcp.ScreenCaptureService;
+import com.portalagent.setup.AutoTaskCoordinator;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
@@ -83,7 +96,7 @@ import java.util.Arrays;
  * </ul>
  * about memory leaks.
  */
-public final class TermuxActivity extends AppCompatActivity implements ServiceConnection {
+public class TermuxActivity extends AppCompatActivity implements ServiceConnection {
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
@@ -1115,6 +1128,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    public void requestEnvironmentRepairFromSettings() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        if (bottomNav != null && bottomNav.getSelectedItemId() != R.id.nav_terminal) {
+            bottomNav.setSelectedItemId(R.id.nav_terminal);
+        } else {
+            showTerminalMode();
+        }
+
+        if (mTermuxTerminalSessionActivityClient != null) {
+            TerminalSession previousSession = getCurrentSession();
+            mTermuxTerminalSessionActivityClient.addNewSession(false,
+                getString(R.string.environment_repair_title));
+            TerminalSession repairSession = getCurrentSession();
+            if (repairSession == null || repairSession == previousSession) {
+                showToast(getString(R.string.environment_repair_no_session), true);
+                return;
+            }
+        }
+
+        if (!hasActiveSession()) {
+            showToast(getString(R.string.environment_repair_no_session), true);
+            return;
+        }
+        if (mAutoTaskCoordinator == null) {
+            showToast(getString(R.string.environment_repair_not_ready), true);
+            return;
+        }
+
+        showToast(getString(R.string.environment_repair_started), false);
+        mAutoTaskCoordinator.requestEnvironmentRepair();
+    }
+
     /** 切换到简化 UI（主页）模式：隐藏终端，显示 HomeFragment。 */
     public void showHomeMode() {
         DrawerLayout drawer = getDrawer();
@@ -1778,7 +1823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public static Intent newInstance(@NonNull final Context context) {
-        Intent intent = new Intent(context, TermuxActivity.class);
+        Intent intent = new Intent(context, com.portalagent.PortalAgentActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
     }

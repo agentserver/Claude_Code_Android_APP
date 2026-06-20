@@ -1,5 +1,6 @@
 package com.termux.app;
 
+import com.portalagent.session.ClaudeStreamSession;
 import android.app.Application;
 import android.content.Context;
 

@@ -43,7 +43,7 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <application
-        android:name=".app.TermuxApplication"
+        android:name="com.portalagent.PortalAgentApplication"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
@@ -55,7 +55,7 @@
         tools:targetApi="m">
 
         <activity
-            android:name=".app.TermuxActivity"
+            android:name="com.portalagent.PortalAgentActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation"
             android:label="@string/application_name"
@@ -82,7 +82,7 @@
         <activity-alias
             android:name=".HomeActivity"
             android:exported="true"
-            android:targetActivity=".app.TermuxActivity">
+            android:targetActivity="com.portalagent.PortalAgentActivity">
 
             <!-- Launch activity automatically on boot on Android Things devices -->
             <intent-filter>
@@ -97,18 +97,18 @@
             android:name=".app.activities.HelpActivity"
             android:exported="false"
             android:label="@string/application_name"
-            android:parentActivityName=".app.TermuxActivity"
+            android:parentActivityName="com.portalagent.PortalAgentActivity"
             android:resizeableActivity="true"
             tools:targetApi="n" />
 
         <activity
-            android:name=".app.activities.SettingsActivity"
+            android:name="com.portalagent.activities.SettingsActivity"
             android:exported="true"
             android:label="@string/title_activity_termux_settings"
             android:theme="@style/Theme.ClaudeSettings.Light.NoActionBar" />
 
         <activity
-            android:name=".app.activities.ApiToolsActivity"
+            android:name="com.portalagent.activities.ApiToolsActivity"
             android:exported="false"
             android:label="@string/title_activity_api_tools"
             android:theme="@style/Theme.ClaudeSettings.Light.NoActionBar" />
@@ -233,16 +233,16 @@
             android:exported="false" />
 
         <service
-            android:name=".app.FloatingStatusService"
+            android:name="com.portalagent.ui.status.FloatingStatusService"
             android:exported="false" />
 
         <service
-            android:name=".app.mcp.ScreenCaptureService"
+            android:name="com.portalagent.mcp.ScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
         <service
-            android:name=".app.mcp.McpAccessibilityService"
+            android:name="com.portalagent.mcp.McpAccessibilityService"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>

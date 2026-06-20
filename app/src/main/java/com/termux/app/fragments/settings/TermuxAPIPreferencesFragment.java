@@ -12,8 +12,8 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
-import com.termux.app.AppSettingsFragment;
-import com.termux.app.activities.ApiToolsActivity;
+import com.portalagent.settings.AppSettingsFragment;
+import com.portalagent.activities.ApiToolsActivity;
 import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
 
 @Keep

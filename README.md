@@ -10,9 +10,52 @@
 | --- | --- |
 | <img src="docs/images/readme/home.png" width="260" alt="主页对话界面" /> | <img src="docs/images/readme/collaboration.png" width="260" alt="协作运行时界面" /> |
 
-| 设置中心 | 设备 API 自检 |
+| 设置中心 | 设备能力工具 |
 | --- | --- |
-| <img src="docs/images/readme/settings.png" width="260" alt="设置中心界面" /> | <img src="docs/images/readme/api-tools.png" width="260" alt="设备 API 自检界面" /> |
+| <img src="docs/images/readme/settings.png" width="260" alt="设置中心界面" /> | <img src="docs/images/readme/api-tools.png" width="260" alt="设备能力工具界面" /> |
+
+## 首次配置
+
+### 1. 在终端页等待环境包部署完成
+
+首次打开后保持 App 在前台，先停留在底部“终端”页等待安装脚本执行。新安装时通常会看到快照部署、工具包安装、Ubuntu 配置和 provider 注入等输出。
+
+看到下面这些标记后，再切到主页或密钥页继续配置：
+
+```text
+[✓] 快照部署完成，继续环境配置...
+[*] Claude + Codex + AgentServer + Loom setup + capabilities ready.
+[✓] PortalAgent environment setup successful.
+```
+
+如果已经有可用 rootfs，第一行快照部署标记可能不会出现；以最后的 `PortalAgent environment setup successful.` 和进入 Ubuntu shell 为准。
+
+如果长时间没有出现 successful 标记、终端停在普通 shell、出现明显报错或部署中断，先保持网络可用，然后进入“设置 -> 应用设置 -> 环境修复”。环境修复会切回终端，重新检查 Ubuntu、工具包、Codex/Claude、AgentServer 和 Loom 配置；如果检测到不完整 rootfs，会重新部署。
+
+### 2. 选择当前助手
+
+主页顶部的“切换 Agent”按钮用于在 Codex 和 Claude 之间切换。切换只影响新的本地聊天和后续协作配置生成，不会删除另一个 provider 的历史数据。
+
+### 3. 配置密钥
+
+进入底部“密钥”页：
+
+- 顶部切换 Codex / Claude。
+- 先配置 Agent 相关设置，再添加 API Key。
+- Codex 写入 `OPENAI_API_KEY` 和 Codex 配置。
+- Claude 写入 `ANTHROPIC_API_KEY`，可选写入 `ANTHROPIC_BASE_URL`。
+
+两个 provider 的密钥、历史、技能和配置相互隔离。
+
+### 4. 授权手机能力
+
+主页和设置页会显示关键权限状态：
+
+| 权限 | 用途 |
+| --- | --- |
+| 截图 | 让 Agent 观察屏幕内容 |
+| 无障碍 | 读取 UI 树、点击、滑动、输入 |
+| ADB | 在无障碍不稳定或不可用时提供候选操作通道 |
 
 ## 功能说明
 
@@ -22,15 +65,7 @@
 | 协作 | 管理 Driver 工作区绑定、本机运行时、Slave 列表、Loom 编排和 AgentServer 连接 |
 | 终端 | 进入 Termux / Ubuntu 环境排查运行状态 |
 | 密钥 | 分别管理 Codex 和 Claude 的 API Key、环境变量和配置文件 |
-| 设置 | 自动化 Boost、工作目录限制、权限和调试入口 |
-
-### 本机对话
-
-- 顶部“切换 Agent”按钮用于在 Codex 和 Claude 之间切换。
-- Codex / Claude 的历史、技能、记忆、上传文件和配置独立显示。
-- 输出流会把思考过程、工具调用和最终回答分层展示。
-- Markdown 中的加粗等基础格式会在气泡内渲染。
-- 输出时页面不会强制跳到底部，便于从回答开头自然阅读。
+| 设置 | 自动化 Boost、工作目录限制、环境修复、权限和调试入口 |
 
 ### 手机能力
 
@@ -80,18 +115,6 @@ App 内置 Android MCP 工具，供 Codex / Claude 调用：
 
 第一阶段只适合打开 App、进入固定页面、点击稳定按钮等低风险操作；发送、删除、支付、授权、密码和验证码等高风险动作不会自动 Boost。
 
-### 设备 API 自检
-
-设备 API 自检页用于确认 App 当前能否调用本机能力：
-
-- 电池状态。
-- 相机信息。
-- 传感器列表。
-- Wi-Fi 连接信息。
-- 剪贴板读取。
-
-从“应用设置 -> 设备 API 工具 -> 设备 API 自检”进入时，会保留底部导航栏，方便返回其他主页面。
-
 ## 安装要求
 
 - Android 7.0+。
@@ -116,33 +139,6 @@ App 内置 Android MCP 工具，供 Codex / Claude 调用：
 ```powershell
 adb install -r release\portal-agent_apt-android-7-debug_universal.apk
 ```
-
-## 首次配置
-
-### 1. 选择当前助手
-
-主页顶部的“切换 Agent”按钮用于在 Codex 和 Claude 之间切换。切换只影响新的本机对话和后续协作配置生成，不会删除另一个 provider 的历史数据。
-
-### 2. 配置密钥
-
-进入底部“密钥”页：
-
-- 顶部切换 Codex / Claude。
-- 先配置 Agent 相关设置，再添加 API Key。
-- Codex 写入 `OPENAI_API_KEY` 和 Codex 配置。
-- Claude 写入 `ANTHROPIC_API_KEY`，可选写入 `ANTHROPIC_BASE_URL`。
-
-两个 provider 的密钥、历史、技能和配置相互隔离。
-
-### 3. 授权手机能力
-
-主页和设置页会显示关键权限状态：
-
-| 权限 | 用途 |
-| --- | --- |
-| 截图 | 让 Agent 观察屏幕内容 |
-| 无障碍 | 读取 UI 树、点击、滑动、输入 |
-| ADB | 在无障碍不稳定或不可用时提供候选操作通道 |
 
 ## 常见问题
 
@@ -184,8 +180,17 @@ Android App 负责 UI、权限、MCP 工具和安装编排：
 - `AgentServerFragment`：AgentServer 工作空间连接的高级页面。
 - `LoomFragment`：Loom Driver / Slave / Observer 的高级配置页面。
 - `WorkspaceAccessSettingsFragment`：工作目录限制和应用目录权限。
-- `AppSettingsFragment`：把应用设置和设备 API 自检纳入底部导航体系。
+- `AppSettingsFragment`：把应用设置、环境修复和调试入口纳入底部导航体系。
 - `McpHttpServer`：向 Ubuntu 内的 Agent 暴露 Android 工具。
+
+### Android 源码边界
+
+PortalAgent 的 APK 包名是 `com.portalagent`。当前 Android `namespace` 暂保留为 `com.termux`，用于兼容 Termux 底座、Manifest 相对类名、资源 `R` 引用和环境部署逻辑。
+
+源码按两层维护：
+
+- `com.termux.*`：Termux 终端底座、入口 Activity/Application/Service、bootstrap 与兼容层。
+- `com.portalagent.*`：PortalAgent 产品能力，包括 Android MCP、自动化、Loom/协作运行时，后续会继续迁移 Provider、聊天和产品 UI。
 
 ### Ubuntu 层
 

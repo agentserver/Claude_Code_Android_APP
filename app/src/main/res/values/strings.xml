@@ -145,6 +145,12 @@
     <!-- Termux App Preferences -->
     <string name="termux_preferences_title">终端设置</string>
     <string name="termux_preferences_summary">键盘、终端显示和调试选项</string>
+    <string name="environment_repair_title">环境修复</string>
+    <string name="environment_repair_summary">切回终端并重新检查 Ubuntu、工具包、Codex/Claude、AgentServer 和 Loom 配置</string>
+    <string name="environment_repair_started">已切到终端，开始环境修复</string>
+    <string name="environment_repair_no_session">终端会话未就绪，请稍后再试</string>
+    <string name="environment_repair_not_ready">环境修复服务未就绪，请重启应用后再试</string>
+    <string name="environment_repair_open_from_app_settings">请从底部设置页进入应用设置后使用环境修复</string>
 
     <string name="automation_boost_preferences_title">自动化 Boost</string>
     <string name="automation_boost_preferences_summary">管理快速路径、应用白名单和已学习的动作配方</string>
